@@ -26,6 +26,6 @@ function positionContainersHorizontally() {
     info.style.height = '100vh';
 }
 
-positionContainers();
-window.addEventListener('resize', positionContainers);
-window.addEventListener('orientationchange', positionContainers);
+// positionContainers();
+// window.addEventListener('resize', positionContainers);
+// window.addEventListener('orientationchange', positionContainers);
