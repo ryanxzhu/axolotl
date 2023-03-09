@@ -4,19 +4,19 @@ body {
     /* overflow: hidden; */
 }
 
-#container {
-    /* display: flex; */
-}
+/* #container {
+    display: flex;
+} */
 
 #canvas-container {
     /* overflow: hidden; */
     background-image: linear-gradient(#e6ffff, #2b8f8f);
-    width: 12000px;
-    height: 20000px;
+    /* width: 1000px;
+    height: 1000px; */
 }
 
 canvas {
-    width: 12000px;
-    height: 12000px;
+    /* width: 1000px;
+    height: 1000px; */
     margin: 0;
 }
