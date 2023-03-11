@@ -1,6 +1,6 @@
 // Dungeon drawing
-const DUNGEON_HEIGHT = 1500;
-const DUNGEON_WIDTH = 1500;
+const DUNGEON_HEIGHT = 2000;
+const DUNGEON_WIDTH = 2000;
 const PADDING = 0.1;
 const CANVAS_HEIGHT = DUNGEON_HEIGHT * (1 + 2 * PADDING);
 const CANVAS_WIDTH = DUNGEON_WIDTH * (1 + 2 * PADDING);
@@ -29,24 +29,19 @@ function generateWhiteNoise(size, whiteLevel = 0.6) {
 }
 
 function drawTerrain() {
-    // c.beginPath();
-    terrain.forEach((pixelsRow, rowIndex) => {
-        const y = rowIndex * PIXEL_RATIO;
-        pixelsRow.forEach((pixel, pixelIndex) => {
-            const x = pixelIndex * PIXEL_RATIO;
-
+    for (let i = 0; i < terrain.length; i++) {
+        for (let j = 0; j < terrain[i].length; j++) {
             c.beginPath();
-            c.fillStyle = COLORS[pixel];
-            c.fillRect(x - PIXEL_RATIO / 2, y - PIXEL_RATIO / 2, PIXEL_RATIO, PIXEL_RATIO);
+            c.fillStyle = COLORS[terrain[i][j].wallType];
+            c.fillRect(
+                terrain[i][j].x - PIXEL_RATIO / 2,
+                terrain[i][j].y - PIXEL_RATIO / 2,
+                PIXEL_RATIO,
+                PIXEL_RATIO
+            );
             c.closePath();
-
-            // c.beginPath();
-            // c.fillStyle = pixel === WALL ? 'purple' : 'rgb(255,255,255,0)';
-            // c.fillRect(x - PIXEL_RATIO / 2, y - PIXEL_RATIO / 2, PIXEL_RATIO / 5, PIXEL_RATIO / 5);
-            // c.closePath();
-        });
-    });
-    // c.closePath();
+        }
+    }
 }
 
 function calculatePixelValueByNeighbors(rowIndex, pixelIndex, matrix) {
@@ -98,7 +93,7 @@ addEventListener('mousemove', function (e) {
 });
 
 class Meeple {
-    constructor(x, y, velocity, radius) {
+    constructor(x, y, radius, velocity) {
         this.x = x;
         this.y = y;
         this.radius = radius;
@@ -106,7 +101,7 @@ class Meeple {
         this.velocity = velocity;
         this.angle = Math.random() * 2 * Math.PI;
         this.angle = Math.PI;
-
+        this.angleChange = 0.1;
         this.xVelocity = 0;
         this.yVelocity = 0;
         this.overlap = false;
@@ -177,22 +172,22 @@ class Meeple {
     }
 
     changeAngle() {
-        this.angle = Math.random() < 0.5 ? this.angle + 0.1 : this.angle - 0.1;
+        this.angle =
+            Math.random() < 0.5 ? this.angle + this.angleChange : this.angle - this.angleChange;
         this.angle = this.angle < 0 ? Math.PI * 2 + this.angle : this.angle;
         this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
     }
 
     startCheckForCollision() {
         for (let i = 0; i < terrain.length; i++) {
-            for (let j = 0; j < terrain[0].length; j++) {
-                if (terrain[i][j] === OPEN_SPACE) continue;
+            for (let j = 0; j < terrain[i].length; j++) {
+                if (terrain[i][j].wallType === OPEN_SPACE) continue;
 
-                const xWall = j * PIXEL_RATIO;
-                const yWall = i * PIXEL_RATIO;
-
+                const xDistanceToWall = Math.abs(this.x - terrain[i][j].x);
+                const yDistanceToWall = Math.abs(this.y - terrain[i][j].y);
                 if (
-                    Math.abs(this.x - xWall) < this.radius + PIXEL_RATIO / 2 &&
-                    Math.abs(this.y - yWall) < this.radius + PIXEL_RATIO / 2
+                    xDistanceToWall < this.minDistanceFromWall &&
+                    yDistanceToWall < this.minDistanceFromWall
                 ) {
                     this.overlap = true;
                     return;
@@ -204,13 +199,11 @@ class Meeple {
 
     checkForCollision() {
         for (let i = 0; i < terrain.length; i++) {
-            for (let j = 0; j < terrain[0].length; j++) {
-                if (terrain[i][j] === OPEN_SPACE) continue;
+            for (let j = 0; j < terrain[i].length; j++) {
+                if (terrain[i][j].wallType === OPEN_SPACE) continue;
 
-                const xWall = j * PIXEL_RATIO;
-                const yWall = i * PIXEL_RATIO;
-                const xDistanceToWall = Math.abs(this.x - xWall);
-                const yDistanceToWall = Math.abs(this.y - yWall);
+                const xDistanceToWall = Math.abs(this.x - terrain[i][j].x);
+                const yDistanceToWall = Math.abs(this.y - terrain[i][j].y);
 
                 if (
                     xDistanceToWall < this.minDistanceFromWall &&
@@ -219,17 +212,7 @@ class Meeple {
                 ) {
                     this.overlap = true;
 
-                    // c.beginPath();
-                    // c.fillStyle = 'red';
-                    // c.fillRect(
-                    //     xWall - PIXEL_RATIO / 2,
-                    //     yWall - PIXEL_RATIO / 2,
-                    //     PIXEL_RATIO / 5,
-                    //     PIXEL_RATIO / 5
-                    // );
-                    // c.closePath();
-
-                    this.angle = this.findCollisionAngleReverse(xWall, yWall);
+                    this.angle = this.findCollisionAngleReverse(terrain[i][j].x, terrain[i][j].y);
                     return;
                 }
             }
@@ -243,24 +226,11 @@ class Meeple {
         c.fillStyle = this.color;
         c.fill();
         c.closePath();
-
-        // c.beginPath();
-        // c.arc(this.x, this.y, 1, 0, Math.PI * 2);
-        // c.fillStyle = 'red';
-        // c.fill();
-        // c.closePath();
     }
 
     update() {
-        // const tempOverlap = this.overlap;
-        // this.overlap = this.checkForCollision();
         this.checkForCollision();
         this.changeAngle();
-
-        // if (this.overlap === true && tempOverlap === false) {
-        //     let a = Math.random() > 0.5 ? 1 : -1;
-        //     this.angle = this.angle - Math.PI * 0.9 * a;
-        // }
         this.xVelocity = this.findXVelocity(this.angle, this.velocity);
         this.yVelocity = this.findYVelocity(this.angle, this.velocity);
         this.x += this.xVelocity;
@@ -296,22 +266,34 @@ function drawAtMousePointer() {
 
 function checkForCollision(x, y) {
     for (let i = 0; i < terrain.length; i++) {
-        for (let j = 0; j < terrain[0].length; j++) {
-            if (terrain[i][j] === OPEN_SPACE) continue;
+        for (let j = 0; j < terrain[i].length; j++) {
+            if (terrain[i][j].wallType === OPEN_SPACE) continue;
 
-            const xWall = j * PIXEL_RATIO;
-            const yWall = i * PIXEL_RATIO;
-            // console.log(mouse.x, x, mouse.y, y);
+            const xDistanceToWall = Math.abs(x - terrain[i][j].x);
+            const yDistanceToWall = Math.abs(y - terrain[i][j].y);
 
             if (
-                Math.abs(x - xWall) < mouse.radius + PIXEL_RATIO / 2 &&
-                Math.abs(y - yWall) < mouse.radius + PIXEL_RATIO / 2
+                xDistanceToWall < mouse.radius + PIXEL_RATIO / 2 &&
+                yDistanceToWall < mouse.radius + PIXEL_RATIO / 2
             ) {
                 return 'blue';
             }
         }
     }
     return 'green';
+}
+
+function convertToPixels(matrix) {
+    const newMatrix = matrix.map((row, y) => {
+        return row.map((cell, x) => {
+            return {
+                x: x * PIXEL_RATIO,
+                y: y * PIXEL_RATIO,
+                wallType: cell,
+            };
+        });
+    });
+    return newMatrix;
 }
 
 function createTerrain() {
@@ -324,19 +306,17 @@ function createTerrain() {
     }
 
     noise_matrix = addPadding(noise_matrix);
+    noise_matrix = convertToPixels(noise_matrix);
 
     return noise_matrix;
 }
 
-const terrain = createTerrain();
-let me;
 function init() {
     do {
         const startX = 250 + Math.random() * 500;
         const startY = 100 + Math.random() * 400;
-        me = new Meeple(startX, startY, 10, 5);
+        me = new Meeple(startX, startY, 10, 2.5);
         me.startCheckForCollision();
-        console.log(me.overlap);
     } while (me.overlap === true);
 
     drawTerrain();
@@ -353,8 +333,10 @@ function animate() {
     // console.timeEnd('animate');
 }
 
-// excecution
+// Excecution
 
+const terrain = createTerrain();
+let me;
 let mouse = {
     x: null,
     y: null,
