@@ -1,6 +1,9 @@
 // Dungeon drawing
-const DUNGEON_HEIGHT = 2000;
-const DUNGEON_WIDTH = 2000;
+
+const CENTRE_PIXEL_X = 600;
+const CENTRE_PIXEL_Y = 400;
+const DUNGEON_HEIGHT = 5000;
+const DUNGEON_WIDTH = 5000;
 const PADDING = 0.1;
 const CANVAS_HEIGHT = DUNGEON_HEIGHT * (1 + 2 * PADDING);
 const CANVAS_WIDTH = DUNGEON_WIDTH * (1 + 2 * PADDING);
@@ -28,7 +31,20 @@ function generateWhiteNoise(size, whiteLevel = 0.6) {
     return new Array(size).fill(0).map(() => (Math.random() >= whiteLevel ? WALL : OPEN_SPACE));
 }
 
-function drawTerrain() {
+function calcPartialTerrain(terrain) {
+    const partialTerrain = [];
+    const { x1, x2, y1, y2 } = findCorners(terrain);
+    for (let i = y1; i <= y2; i++) {
+        const row = [];
+        for (let j = x1; j <= x2; j++) {
+            row.push(terrain[i][j]);
+        }
+        partialTerrain.push(row);
+    }
+    return partialTerrain;
+}
+
+function drawTerrain(terrain) {
     for (let i = 0; i < terrain.length; i++) {
         for (let j = 0; j < terrain[i].length; j++) {
             c.beginPath();
@@ -42,6 +58,32 @@ function drawTerrain() {
             c.closePath();
         }
     }
+}
+
+function findCorners(partialTerrain) {
+    const firstRow = partialTerrain[0].map((pixel) => pixel.x);
+    const column = partialTerrain.map((row) => row[0].y);
+    const x1 = binarySearchX(firstRow, me.x - CENTRE_PIXEL_X * 1.2, 0);
+    const x2 = binarySearchX(firstRow, me.x + CENTRE_PIXEL_X * 1.2, 1);
+    const y1 = binarySearchX(column, me.y - CENTRE_PIXEL_Y * 1.2, 0);
+    const y2 = binarySearchX(column, me.y + CENTRE_PIXEL_Y * 1.2, 1);
+
+    return { x1, x2, y1, y2 };
+}
+
+function binarySearchX(row, target, offset = 0) {
+    let left = 0;
+    let right = row.length - 1;
+    let middle = Math.floor((left + right) / 2);
+    while (left < right) {
+        if (row[middle] < target) {
+            left = middle + 1;
+        } else {
+            right = middle;
+        }
+        middle = Math.floor((left + right) / 2);
+    }
+    return middle - offset;
 }
 
 function calculatePixelValueByNeighbors(rowIndex, pixelIndex, matrix) {
@@ -223,6 +265,7 @@ class Meeple {
     draw() {
         c.beginPath();
         c.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        // c.arc(CENTRE_PIXEL, CENTRE_PIXEL, this.radius, 0, Math.PI * 2);
         c.fillStyle = this.color;
         c.fill();
         c.closePath();
@@ -307,30 +350,36 @@ function createTerrain() {
 
     noise_matrix = addPadding(noise_matrix);
     noise_matrix = convertToPixels(noise_matrix);
+    // console.log(noise_matrix);
 
     return noise_matrix;
 }
 
 function init() {
     do {
-        const startX = 250 + Math.random() * 500;
-        const startY = 100 + Math.random() * 400;
-        me = new Meeple(startX, startY, 10, 2.5);
+        const startX = CANVAS_WIDTH / 5 + Math.random() * 500;
+        const startY = CANVAS_HEIGHT / 5 + Math.random() * 500;
+        me = new Meeple(startX, startY, 10, 2);
         me.startCheckForCollision();
     } while (me.overlap === true);
-
-    drawTerrain();
+    const partialTerrain = calcPartialTerrain(terrain);
+    drawTerrain(partialTerrain);
+    // drawTerrain(terrain);
+    me.draw();
 }
 
 function animate() {
-    // console.time('animate');
+    console.time('animate');
+
     requestAnimationFrame(animate);
     c.clearRect(0, 0, CANVAS_HEIGHT, CANVAS_WIDTH);
-
-    drawTerrain();
+    const partialTerrain = calcPartialTerrain(terrain);
+    drawTerrain(partialTerrain);
+    // drawTerrain(terrain);
     me.update();
     drawAtMousePointer();
-    // console.timeEnd('animate');
+
+    console.timeEnd('animate');
 }
 
 // Excecution
