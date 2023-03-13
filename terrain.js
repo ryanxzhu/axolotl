@@ -90,6 +90,15 @@ function convertToPixelObjs(terrain) {
 
 class Terrain {
     constructor() {
+        // let noiseMatrix = createNoiseMatrix();
+        // let terrain = convertNoiseMatrixToTerrain(noiseMatrix);
+        // terrain = addPadding(terrain);
+        // terrain = convertToPixelObjs(terrain);
+        this.full = [];
+        this.displayed = [];
+    }
+
+    createFull() {
         let noiseMatrix = createNoiseMatrix();
         let terrain = convertNoiseMatrixToTerrain(noiseMatrix);
         terrain = addPadding(terrain);

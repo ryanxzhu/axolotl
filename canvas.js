@@ -83,6 +83,7 @@ addEventListener('wheel', function (e) {
 });
 
 const terrain = new Terrain();
+terrain.createFull();
 const me = generateMeeple(terrain, CANVAS_WIDTH / 5, CANVAS_HEIGHT / 5);
 const mouse = {
     x: null,
