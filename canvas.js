@@ -111,9 +111,9 @@ function checkForCollision(x, y, terrain) {
 
 function init() {
     me = generateMeeple(terrain, CANVAS_WIDTH / 5, CANVAS_HEIGHT / 5);
-    const partialTerrain = calcPartialTerrain(me, terrain, CENTRE_PIXEL_X, CENTRE_PIXEL_Y);
-    drawTerrain(partialTerrain);
-    me.draw();
+    // const partialTerrain = calcPartialTerrain(me, terrain, CENTRE_PIXEL_X, CENTRE_PIXEL_Y);
+    // drawTerrain(partialTerrain);
+    // me.draw();
 }
 
 function animate() {
