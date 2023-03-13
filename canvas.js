@@ -1,6 +1,4 @@
 // Dungeon drawing
-console.log('canvas file:', CANVAS_HEIGHT);
-
 const CENTRE_PIXEL_X = 600;
 const CENTRE_PIXEL_Y = 400;
 const canvas = document.querySelector('canvas');

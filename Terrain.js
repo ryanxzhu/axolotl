@@ -3,7 +3,6 @@ const DUNGEON_WIDTH = 5000;
 const PADDING = 0.1;
 const CANVAS_HEIGHT = DUNGEON_HEIGHT * (1 + 2 * PADDING);
 const CANVAS_WIDTH = DUNGEON_WIDTH * (1 + 2 * PADDING);
-console.log('terrains file:', CANVAS_HEIGHT);
 const WHITE_LEVEL = 0.55;
 const WALL = 0;
 const OPEN_SPACE = 1;
