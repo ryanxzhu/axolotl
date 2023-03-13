@@ -17,6 +17,7 @@ class Meeple {
         this.color = color;
         this.adjustedX = 0;
         this.adjustedY = 0;
+        this.collisionMap = [];
     }
 
     resultantVelocity(xVelocity, yVelocity) {
@@ -89,13 +90,13 @@ class Meeple {
         this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
     }
 
-    checkForCollision(terrain, overlap = false) {
-        for (let i = 0; i < terrain.length; i++) {
-            for (let j = 0; j < terrain[i].length; j++) {
-                if (terrain[i][j].wallType === OPEN_SPACE) continue;
+    checkForCollision(overlap = false) {
+        for (let i = 0; i < this.collisionMap.length; i++) {
+            for (let j = 0; j < this.collisionMap[i].length; j++) {
+                if (this.collisionMap[i][j].wallType === OPEN_SPACE) continue;
 
-                const xDistanceToWall = Math.abs(this.x - terrain[i][j].x);
-                const yDistanceToWall = Math.abs(this.y - terrain[i][j].y);
+                const xDistanceToWall = Math.abs(this.x - this.collisionMap[i][j].x);
+                const yDistanceToWall = Math.abs(this.y - this.collisionMap[i][j].y);
 
                 if (
                     xDistanceToWall < this.minDistanceFromWall &&
@@ -104,7 +105,10 @@ class Meeple {
                 ) {
                     this.overlap = true;
 
-                    this.angle = this.findCollisionAngleReverse(terrain[i][j].x, terrain[i][j].y);
+                    this.angle = this.findCollisionAngleReverse(
+                        this.collisionMap[i][j].x,
+                        this.collisionMap[i][j].y
+                    );
                     return;
                 }
             }
@@ -120,8 +124,8 @@ class Meeple {
         c.closePath();
     }
 
-    update(terrain) {
-        this.checkForCollision(terrain, this.overlap);
+    update() {
+        this.checkForCollision(this.overlap);
         this.changeAngle();
         this.xVelocity = this.findXVelocity(this.angle, this.velocity);
         this.yVelocity = this.findYVelocity(this.angle, this.velocity);
@@ -137,8 +141,9 @@ function generateMeeple(terrain, startX, startY) {
         const x = startX + Math.random() * 500;
         const y = startY + Math.random() * 500;
         me = new Meeple(x, y, MY_SIZE, MY_VELOCITY, MY_COLOR);
-        terrain.collisionMap = terrain.calcPartial(me, PIXEL_RATIO * 2, PIXEL_RATIO * 2);
-        me.checkForCollision(terrain.collisionMap);
+        me.collisionMap = terrain.calcPartial(me, PIXEL_RATIO * 2, PIXEL_RATIO * 2);
+        me.checkForCollision();
+        console.log('generated');
     } while (me.overlap === true);
     return me;
 }
