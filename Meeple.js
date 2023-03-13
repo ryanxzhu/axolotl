@@ -8,38 +8,42 @@ class Meeple {
         this.y = y;
         this.radius = radius;
         this.velocity = velocity;
+        this.color = color;
         this.minDistanceFromWall = this.radius + PIXEL_RATIO / 2;
         this.angle = Math.random() * 2 * Math.PI;
         this.angleChange = 0.1;
         this.xVelocity = 0;
         this.yVelocity = 0;
         this.overlap = false;
-        this.color = color;
         this.adjustedX = 0;
         this.adjustedY = 0;
         this.collisionMap = [];
     }
 
-    resultantVelocity(xVelocity, yVelocity) {
+    resultantVelocity(xVelocity = this.xVelocity, yVelocity = this.yVelocity) {
         return Math.sqrt(Math.pow(xVelocity, 2) + Math.pow(yVelocity, 2));
     }
 
-    angleOfDirection(xVelocity, yVelocity, resultantVelocity) {
+    angleOfDirection(
+        xVelocity = this.xVelocity,
+        yVelocity = this.yVelocity,
+        velocity = this.velocity
+    ) {
         if (xVelocity >= 0 && yVelocity >= 0) {
-            return Math.asin(xVelocity / resultantVelocity);
+            return Math.asin(xVelocity / velocity);
         }
         if (xVelocity >= 0 && yVelocity <= 0) {
-            return Math.PI / 2 + Math.acos(xVelocity / resultantVelocity);
+            return Math.PI / 2 + Math.acos(xVelocity / velocity);
         }
         if (xVelocity <= 0 && yVelocity <= 0) {
-            return Math.PI + Math.asin(Math.abs(xVelocity) / resultantVelocity);
+            return Math.PI + Math.asin(Math.abs(xVelocity) / velocity);
         }
         if (xVelocity <= 0 && yVelocity >= 0) {
-            return (Math.PI * 3) / 2 + Math.asin(yVelocity / resultantVelocity);
+            return (Math.PI * 3) / 2 + Math.asin(yVelocity / velocity);
         }
     }
 
-    findXVelocity(angle, velocity) {
+    findXVelocity(angle = this.angle, velocity = this.velocity) {
         if (angle <= Math.PI / 2) {
             return Math.sin(angle) * velocity;
         }
@@ -57,7 +61,7 @@ class Meeple {
         }
     }
 
-    findYVelocity(angle, velocity) {
+    findYVelocity(angle = this.angle, velocity = this.velocity) {
         if (angle <= Math.PI / 2) {
             return Math.cos(angle) * velocity;
         }
@@ -75,7 +79,7 @@ class Meeple {
         }
     }
 
-    findCollisionAngleReverse(xWall, yWall) {
+    calcBounceAngle(xWall, yWall) {
         const xDirection = this.x - xWall;
         const yDirection = this.y - yWall;
         const resultantVelocity = this.resultantVelocity(xDirection, yDirection);
@@ -105,7 +109,7 @@ class Meeple {
                 ) {
                     this.overlap = true;
 
-                    this.angle = this.findCollisionAngleReverse(
+                    this.angle = this.calcBounceAngle(
                         this.collisionMap[i][j].x,
                         this.collisionMap[i][j].y
                     );
@@ -127,8 +131,8 @@ class Meeple {
     update() {
         this.checkForCollision(this.overlap);
         this.changeAngle();
-        this.xVelocity = this.findXVelocity(this.angle, this.velocity);
-        this.yVelocity = this.findYVelocity(this.angle, this.velocity);
+        this.xVelocity = this.findXVelocity();
+        this.yVelocity = this.findYVelocity();
         this.x += this.xVelocity;
         this.y += this.yVelocity;
         this.draw();

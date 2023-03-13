@@ -64,7 +64,7 @@ function animate() {
     terrain.displayed = terrain.calcPartial(me, CENTRE_PIXEL_X, CENTRE_PIXEL_Y);
     terrain.draw(terrain.displayed);
     me.collisionMap = terrain.calcPartial(me, PIXEL_RATIO * 2, PIXEL_RATIO * 2);
-    me.update(terrain.collisionMap);
+    me.update();
     drawAtMousePointer(terrain);
 
     // console.timeEnd('animate');
