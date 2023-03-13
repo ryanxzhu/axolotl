@@ -1,4 +1,6 @@
 // Dungeon drawing
+console.log('canvas file:', CANVAS_HEIGHT);
+
 const CENTRE_PIXEL_X = 600;
 const CENTRE_PIXEL_Y = 400;
 const canvas = document.querySelector('canvas');
@@ -55,7 +57,7 @@ function checkForCollision(x, y, terrain) {
 }
 
 function animate() {
-    console.time('animate');
+    // console.time('animate');
 
     requestAnimationFrame(animate);
     c.clearRect(0, 0, canvas.width, canvas.height);
@@ -66,7 +68,7 @@ function animate() {
     // console.log(me);
     drawAtMousePointer(terrain);
 
-    console.timeEnd('animate');
+    // console.timeEnd('animate');
 }
 
 // Excecution
