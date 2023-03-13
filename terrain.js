@@ -87,10 +87,68 @@ function convertToPixelObjs(terrain) {
     return terrain;
 }
 
-function createTerrain() {
-    let noiseMatrix = createNoiseMatrix();
-    let terrain = convertNoiseMatrixToTerrain(noiseMatrix);
-    terrain = addPadding(terrain);
-    terrain = convertToPixelObjs(terrain);
-    return terrain;
+class Terrain {
+    constructor() {
+        let noiseMatrix = createNoiseMatrix();
+        let terrain = convertNoiseMatrixToTerrain(noiseMatrix);
+        terrain = addPadding(terrain);
+        terrain = convertToPixelObjs(terrain);
+        this.full = terrain;
+    }
+
+    findCorners(meeple, xOffset, yOffset) {
+        const firstRow = this.full[0].map((pixel) => pixel.x);
+        const column = this.full.map((row) => row[0].y);
+        const x1 = this.binarySearch(firstRow, meeple.x - xOffset * 1.2, 0);
+        const x2 = this.binarySearch(firstRow, meeple.x + xOffset * 1.2, 1);
+        const y1 = this.binarySearch(column, meeple.y - yOffset * 1.2, 0);
+        const y2 = this.binarySearch(column, meeple.y + yOffset * 1.2, 1);
+
+        return { x1, x2, y1, y2 };
+    }
+
+    calcPartial(meeple, xOffset, yOffset) {
+        const partialTerrain = [];
+        const { x1, x2, y1, y2 } = this.findCorners(meeple, xOffset, yOffset);
+        for (let i = y1; i <= y2; i++) {
+            const row = [];
+            for (let j = x1; j <= x2; j++) {
+                row.push(this.full[i][j]);
+            }
+            partialTerrain.push(row);
+        }
+
+        return partialTerrain;
+    }
+
+    draw(terrain) {
+        for (let i = 0; i < terrain.length; i++) {
+            for (let j = 0; j < terrain[i].length; j++) {
+                c.beginPath();
+                c.fillStyle = COLORS[terrain[i][j].wallType];
+                c.fillRect(
+                    terrain[i][j].x - PIXEL_RATIO / 2,
+                    terrain[i][j].y - PIXEL_RATIO / 2,
+                    PIXEL_RATIO,
+                    PIXEL_RATIO
+                );
+                c.closePath();
+            }
+        }
+    }
+
+    binarySearch(row, target, offset = 0) {
+        let left = 0;
+        let right = row.length - 1;
+        let middle = Math.floor((left + right) / 2);
+        while (left < right) {
+            if (row[middle] < target) {
+                left = middle + 1;
+            } else {
+                right = middle;
+            }
+            middle = Math.floor((left + right) / 2);
+        }
+        return middle - offset;
+    }
 }

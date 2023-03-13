@@ -137,8 +137,8 @@ function generateMeeple(terrain, startX, startY) {
         const x = startX + Math.random() * 500;
         const y = startY + Math.random() * 500;
         me = new Meeple(x, y, MY_SIZE, MY_VELOCITY, MY_COLOR);
-        const miniTerrain = calcPartialTerrain(me, terrain, PIXEL_RATIO * 2, PIXEL_RATIO * 2);
-        me.checkForCollision(miniTerrain);
+        terrain.collisionMap = terrain.calcPartial(me, PIXEL_RATIO * 2, PIXEL_RATIO * 2);
+        me.checkForCollision(terrain.collisionMap);
     } while (me.overlap === true);
     return me;
 }
