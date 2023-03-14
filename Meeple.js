@@ -1,25 +1,39 @@
 const MY_SIZE = 20;
-const MY_VELOCITY = 0;
+const MY_VELOCITY = 2;
 const MY_COLOR = 'pink';
+const BOUNCE_DRAG = 0.33;
 
 class Meeple {
     constructor(x, y, radius, velocity, color) {
         this.x = x;
         this.y = y;
         this.radius = radius;
+        this.bulgingRadius = {
+            expanding: true,
+            radius: this.radius,
+            maxRadius: this.radius * 1.1,
+            adjustment: 1.005,
+        };
         this.velocity = velocity;
-        this.acceleration = 0.3;
-        this.naturalDeceleration = 0.1;
+        this.maxVelocity = 5;
+        this.acceleration = 0.15;
+        this.naturalDeceleration = 0.98;
         this.color = color;
         this.minDistanceFromWall = this.radius + PIXEL_RATIO / 2;
         this.angle = Math.random() * 2 * Math.PI;
-        this.angleChange = 0.1;
+        this.angleChange = 0.05;
         this.xVelocity = 0;
         this.yVelocity = 0;
         this.overlap = false;
         this.adjustedX = 0;
         this.adjustedY = 0;
         this.collisionMap = [];
+        this.controller = {
+            up: { pressed: false, func: this.accelerate },
+            down: { pressed: false, func: this.decelerate },
+            left: { pressed: false, func: this.turnLeft },
+            right: { pressed: false, func: this.turnRight },
+        };
     }
 
     resultantVelocity(xVelocity = this.xVelocity, yVelocity = this.yVelocity) {
@@ -96,25 +110,6 @@ class Meeple {
         this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
     }
 
-    // function checkForCollision(x, y, terrain) {
-    //     for (let i = 0; i < terrain.length; i++) {
-    //         for (let j = 0; j < terrain[i].length; j++) {
-    //             if (terrain[i][j].wallType === OPEN_SPACE) continue;
-
-    //             const xDistanceToWall = Math.abs(x - terrain[i][j].x);
-    //             const yDistanceToWall = Math.abs(y - terrain[i][j].y);
-
-    //             if (
-    //                 xDistanceToWall < mouse.radius + PIXEL_RATIO / 2 &&
-    //                 yDistanceToWall < mouse.radius + PIXEL_RATIO / 2
-    //             ) {
-    //                 return 'red';
-    //             }
-    //         }
-    //     }
-    //     return 'green';
-    // }
-
     checkForCollision(overlap = false) {
         for (let i = 0; i < this.collisionMap.length; i++) {
             for (let j = 0; j < this.collisionMap[i].length; j++) {
@@ -128,7 +123,10 @@ class Meeple {
                     overlap === false
                 ) {
                     this.overlap = true;
-
+                    this.velocity = this.velocity * BOUNCE_DRAG;
+                    if (this.velocity < 0.3) {
+                        this.velocity = 0.5; // necessary to prevent the meeple going into the wall
+                    }
                     this.angle = this.calcBounceAngle(
                         this.collisionMap[i][j].x,
                         this.collisionMap[i][j].y
@@ -162,17 +160,85 @@ class Meeple {
         return terrain;
     }
 
+    accelerate() {
+        if (Math.abs(this.velocity) <= this.maxVelocity) {
+            this.velocity += this.acceleration;
+        }
+    }
+
+    decelerate() {
+        if (Math.abs(this.velocity) <= this.maxVelocity) {
+            this.velocity -= this.acceleration;
+        }
+    }
+
+    naturallyDecelerate() {
+        this.velocity *= this.naturalDeceleration;
+    }
+
+    turnLeft() {
+        this.angle =
+            this.velocity >= 0 ? this.angle + this.angleChange : this.angle - this.angleChange;
+        this.angle = this.angle < 0 ? this.angle + Math.PI * 2 : this.angle;
+        this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
+    }
+
+    turnRight() {
+        this.angle =
+            this.velocity >= 0 ? this.angle - this.angleChange : this.angle + this.angleChange;
+        this.angle = this.angle < 0 ? this.angle + Math.PI * 2 : this.angle;
+        this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
+    }
+
+    updateAngleAndVelocity() {
+        if (this.controller.up.pressed) {
+            this.accelerate();
+        }
+        if (this.controller.down.pressed) {
+            this.decelerate();
+        }
+        if (this.controller.left.pressed) {
+            this.turnLeft();
+        }
+        if (this.controller.right.pressed) {
+            this.turnRight();
+        }
+    }
+
+    bulging() {
+        if (this.bulgingRadius.radius >= this.bulgingRadius.maxRadius) {
+            this.bulgingRadius.expanding = false;
+        }
+
+        if (this.bulgingRadius.radius <= this.radius) {
+            this.bulgingRadius.expanding = true;
+        }
+        if (this.bulgingRadius.expanding) {
+            this.bulgingRadius.radius *= this.bulgingRadius.adjustment;
+            return;
+        }
+
+        if (this.bulgingRadius.expanding === false) {
+            this.bulgingRadius.radius /= this.bulgingRadius.adjustment;
+            return;
+        }
+    }
+
     draw() {
         c.beginPath();
-        c.arc(this.adjustedX, this.adjustedY, this.radius, 0, Math.PI * 2);
+        console.log(this.bulgingRadius.radius);
+        c.arc(this.adjustedX, this.adjustedY, this.bulgingRadius.radius, 0, Math.PI * 2);
         c.fillStyle = this.color;
         c.fill();
         c.closePath();
     }
 
     update() {
+        this.bulging();
         this.checkForCollision(this.overlap);
-        this.changeAngle();
+        this.updateAngleAndVelocity();
+        // this.changeAngle();
+        this.naturallyDecelerate();
         this.xVelocity = this.findXVelocity();
         this.yVelocity = this.findYVelocity();
         this.x += this.xVelocity;

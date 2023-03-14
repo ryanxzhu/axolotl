@@ -71,7 +71,7 @@ function init() {
 }
 
 function animate() {
-    console.time('animate');
+    // console.time('animate');
 
     requestAnimationFrame(animate);
     c.clearRect(0, 0, canvas.width, canvas.height);
@@ -83,7 +83,7 @@ function animate() {
     me.update();
     drawAtMousePointer(terrain);
 
-    console.timeEnd('animate');
+    // console.timeEnd('animate');
 }
 
 // Excecution
@@ -96,6 +96,43 @@ addEventListener('mousemove', function (e) {
 addEventListener('wheel', function (e) {
     mouse.x = e.offsetX;
     mouse.y = e.offsetY;
+});
+
+addEventListener('keydown', function (e) {
+    console.log(me.controller);
+    if (e.key === 'ArrowUp' || e.key === 'w') {
+        me.controller.up.pressed = true;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 's') {
+        me.controller.down.pressed = true;
+    }
+
+    if (e.key === 'ArrowLeft' || e.key === 'a') {
+        me.controller.left.pressed = true;
+    }
+
+    if (e.key === 'ArrowRight' || e.key === 'd') {
+        me.controller.right.pressed = true;
+    }
+});
+
+addEventListener('keyup', function (e) {
+    if (e.key === 'ArrowUp' || e.key === 'w') {
+        me.controller.up.pressed = false;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 's') {
+        me.controller.down.pressed = false;
+    }
+
+    if (e.key === 'ArrowLeft' || e.key === 'a') {
+        me.controller.left.pressed = false;
+    }
+
+    if (e.key === 'ArrowRight' || e.key === 'd') {
+        me.controller.right.pressed = false;
+    }
 });
 
 const terrain = new Terrain();
