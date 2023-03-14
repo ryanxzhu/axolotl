@@ -1,5 +1,5 @@
-const DUNGEON_HEIGHT = 7500;
-const DUNGEON_WIDTH = 7500;
+const DUNGEON_HEIGHT = 20000;
+const DUNGEON_WIDTH = 20000;
 const PADDING = 0.1;
 const CANVAS_HEIGHT = DUNGEON_HEIGHT * (1 + 2 * PADDING);
 const CANVAS_WIDTH = DUNGEON_WIDTH * (1 + 2 * PADDING);
@@ -7,8 +7,10 @@ const WHITE_LEVEL = 0.53;
 const WALL = 0;
 const OPEN_SPACE = 1;
 const COLORS = {
-    [WALL]: '#03332d',
-    [OPEN_SPACE]: '#e3fffe',
+    [WALL]: 'hsl(18, 89%, 11%)',
+    [OPEN_SPACE]: 'hsl(18, 100%, 95%)',
+    // [WALL]: 'hsl(173, 89%, 11%)',
+    // [OPEN_SPACE]: 'hsl(178, 100%, 95%)',
 };
 const PIXEL_RATIO = 50;
 const MATRIX_DIMENSIONS = {

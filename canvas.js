@@ -71,19 +71,18 @@ function init() {
 }
 
 function animate() {
-    // console.time('animate');
+    console.time('animate');
 
     requestAnimationFrame(animate);
     c.clearRect(0, 0, canvas.width, canvas.height);
     terrain.displayed = terrain.calcPartial(me, CENTRE_PIXEL_X, CENTRE_PIXEL_Y);
     me.collisionMap = terrain.calcPartial(me, PIXEL_RATIO + me.radius, PIXEL_RATIO + me.radius);
     terrain.displayed = me.adjustFrame(terrain.displayed);
-    // console.log(terrain.displayed);
     terrain.draw(terrain.displayed);
     me.update();
-    drawAtMousePointer(terrain);
+    // drawAtMousePointer(terrain);
 
-    // console.timeEnd('animate');
+    console.timeEnd('animate');
 }
 
 // Excecution
@@ -99,7 +98,6 @@ addEventListener('wheel', function (e) {
 });
 
 addEventListener('keydown', function (e) {
-    console.log(me.controller);
     if (e.key === 'ArrowUp' || e.key === 'w') {
         me.controller.up.pressed = true;
     }
@@ -135,8 +133,14 @@ addEventListener('keyup', function (e) {
     }
 });
 
+console.time('terrain generation');
 const terrain = new Terrain();
+console.timeEnd('terrain generation');
+
+console.time('meeple generation');
 const me = generateMeeple(terrain, CANVAS_WIDTH / 5, CANVAS_HEIGHT / 5);
+console.timeEnd('meeple generation');
+
 const mouse = {
     x: null,
     y: null,

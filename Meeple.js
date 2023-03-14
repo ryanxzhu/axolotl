@@ -1,7 +1,7 @@
 const MY_SIZE = 20;
 const MY_VELOCITY = 2;
-const MY_COLOR = 'pink';
-const BOUNCE_DRAG = 0.33;
+const MY_COLOR = 'hsl(300, 100%, 50%)';
+const BOUNCE_DRAG = 0.66;
 
 class Meeple {
     constructor(x, y, radius, velocity, color) {
@@ -96,8 +96,8 @@ class Meeple {
     }
 
     calcBounceAngle(xWall, yWall) {
-        const xDirection = this.x - xWall;
-        const yDirection = this.y - yWall;
+        const xDirection = xWall - this.x;
+        const yDirection = yWall - this.y;
         const resultantVelocity = this.resultantVelocity(xDirection, yDirection);
         const angleOfDirection = this.angleOfDirection(xDirection, yDirection, resultantVelocity);
         return angleOfDirection;
@@ -125,12 +125,14 @@ class Meeple {
                     this.overlap = true;
                     this.velocity = this.velocity * BOUNCE_DRAG;
                     if (this.velocity < 0.3) {
-                        this.velocity = 0.5; // necessary to prevent the meeple going into the wall
+                        this.velocity = 0.3; // necessary to prevent the meeple going into the wall
                     }
                     this.angle = this.calcBounceAngle(
                         this.collisionMap[i][j].x,
                         this.collisionMap[i][j].y
                     );
+
+                    this.velocity = -this.velocity;
                     return;
                 }
             }
@@ -143,12 +145,6 @@ class Meeple {
         const yAdjustment = this.y;
         terrain = terrain.map((row) => {
             return row.map((cell) => {
-                // console.log(
-                //     cell.x,
-                //     xAdjustment,
-                //     this.adjustedX,
-                //     cell.x - xAdjustment + this.adjustedX
-                // );
                 return {
                     x: cell.x - xAdjustment + this.adjustedX,
                     y: cell.y - yAdjustment + this.adjustedY,
@@ -226,7 +222,6 @@ class Meeple {
 
     draw() {
         c.beginPath();
-        console.log(this.bulgingRadius.radius);
         c.arc(this.adjustedX, this.adjustedY, this.bulgingRadius.radius, 0, Math.PI * 2);
         c.fillStyle = this.color;
         c.fill();
