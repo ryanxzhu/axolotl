@@ -11,9 +11,12 @@ body {
 
 #canvas-container {
     /* overflow: hidden; */
-    background-image: linear-gradient(#e6ffff, #2b8f8f);
+    /* background-image: linear-gradient(#e6ffff, #2b8f8f); */
+    background-color: #5a5a5a;
     /* width: 1000px;
     height: 1000px; */
+    /* width: 100%;
+    height: 100%; */
 }
 
 canvas {

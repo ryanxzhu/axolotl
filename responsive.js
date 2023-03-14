@@ -1,5 +1,5 @@
 // window.scrollTo(0, 1);
-const container = document.querySelector('#container');
+// const container = document.querySelector('#container');
 // const canvasContainer = document.querySelector('#canvas-container');
 const info = document.querySelector('#info');
 function positionContainers() {

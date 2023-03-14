@@ -1,14 +1,14 @@
-const DUNGEON_HEIGHT = 5000;
-const DUNGEON_WIDTH = 5000;
+const DUNGEON_HEIGHT = 7500;
+const DUNGEON_WIDTH = 7500;
 const PADDING = 0.1;
 const CANVAS_HEIGHT = DUNGEON_HEIGHT * (1 + 2 * PADDING);
 const CANVAS_WIDTH = DUNGEON_WIDTH * (1 + 2 * PADDING);
-const WHITE_LEVEL = 0.55;
+const WHITE_LEVEL = 0.53;
 const WALL = 0;
 const OPEN_SPACE = 1;
 const COLORS = {
     [WALL]: '#03332d',
-    [OPEN_SPACE]: 'rgba(255,255,255,0)',
+    [OPEN_SPACE]: '#e3fffe',
 };
 const PIXEL_RATIO = 50;
 const MATRIX_DIMENSIONS = {
@@ -99,10 +99,10 @@ class Terrain {
     findCorners(meeple, xOffset, yOffset) {
         const firstRow = this.full[0].map((pixel) => pixel.x);
         const column = this.full.map((row) => row[0].y);
-        const x1 = this.binarySearch(firstRow, meeple.x - xOffset * 1.2, 0);
-        const x2 = this.binarySearch(firstRow, meeple.x + xOffset * 1.2, 1);
-        const y1 = this.binarySearch(column, meeple.y - yOffset * 1.2, 0);
-        const y2 = this.binarySearch(column, meeple.y + yOffset * 1.2, 1);
+        const x1 = this.binarySearch(firstRow, meeple.x - xOffset * 1.1, 0);
+        const x2 = this.binarySearch(firstRow, meeple.x + xOffset * 1.1, 1);
+        const y1 = this.binarySearch(column, meeple.y - yOffset * 1.1, 0);
+        const y2 = this.binarySearch(column, meeple.y + yOffset * 1.1, 1);
 
         return { x1, x2, y1, y2 };
     }
@@ -129,8 +129,8 @@ class Terrain {
                 c.fillRect(
                     terrain[i][j].x - PIXEL_RATIO / 2,
                     terrain[i][j].y - PIXEL_RATIO / 2,
-                    PIXEL_RATIO,
-                    PIXEL_RATIO
+                    PIXEL_RATIO + 1, // the + 1 is a hack to fix weird grid display
+                    PIXEL_RATIO + 1 // the + 1 is a hack to fix weird grid display
                 );
                 c.closePath();
             }

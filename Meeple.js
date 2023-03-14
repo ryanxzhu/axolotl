@@ -1,6 +1,6 @@
-const MY_SIZE = 10;
-const MY_VELOCITY = 2;
-const MY_COLOR = 'orange';
+const MY_SIZE = 20;
+const MY_VELOCITY = 0;
+const MY_COLOR = 'pink';
 
 class Meeple {
     constructor(x, y, radius, velocity, color) {
@@ -8,6 +8,8 @@ class Meeple {
         this.y = y;
         this.radius = radius;
         this.velocity = velocity;
+        this.acceleration = 0.3;
+        this.naturalDeceleration = 0.1;
         this.color = color;
         this.minDistanceFromWall = this.radius + PIXEL_RATIO / 2;
         this.angle = Math.random() * 2 * Math.PI;
@@ -94,6 +96,25 @@ class Meeple {
         this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
     }
 
+    // function checkForCollision(x, y, terrain) {
+    //     for (let i = 0; i < terrain.length; i++) {
+    //         for (let j = 0; j < terrain[i].length; j++) {
+    //             if (terrain[i][j].wallType === OPEN_SPACE) continue;
+
+    //             const xDistanceToWall = Math.abs(x - terrain[i][j].x);
+    //             const yDistanceToWall = Math.abs(y - terrain[i][j].y);
+
+    //             if (
+    //                 xDistanceToWall < mouse.radius + PIXEL_RATIO / 2 &&
+    //                 yDistanceToWall < mouse.radius + PIXEL_RATIO / 2
+    //             ) {
+    //                 return 'red';
+    //             }
+    //         }
+    //     }
+    //     return 'green';
+    // }
+
     checkForCollision(overlap = false) {
         for (let i = 0; i < this.collisionMap.length; i++) {
             for (let j = 0; j < this.collisionMap[i].length; j++) {
@@ -101,7 +122,6 @@ class Meeple {
 
                 const xDistanceToWall = Math.abs(this.x - this.collisionMap[i][j].x);
                 const yDistanceToWall = Math.abs(this.y - this.collisionMap[i][j].y);
-
                 if (
                     xDistanceToWall < this.minDistanceFromWall &&
                     yDistanceToWall < this.minDistanceFromWall &&
@@ -120,9 +140,31 @@ class Meeple {
         this.overlap = false;
     }
 
+    adjustFrame(terrain) {
+        const xAdjustment = this.x;
+        const yAdjustment = this.y;
+        terrain = terrain.map((row) => {
+            return row.map((cell) => {
+                // console.log(
+                //     cell.x,
+                //     xAdjustment,
+                //     this.adjustedX,
+                //     cell.x - xAdjustment + this.adjustedX
+                // );
+                return {
+                    x: cell.x - xAdjustment + this.adjustedX,
+                    y: cell.y - yAdjustment + this.adjustedY,
+                    wallType: cell.wallType,
+                };
+            });
+        });
+
+        return terrain;
+    }
+
     draw() {
         c.beginPath();
-        c.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        c.arc(this.adjustedX, this.adjustedY, this.radius, 0, Math.PI * 2);
         c.fillStyle = this.color;
         c.fill();
         c.closePath();
@@ -145,9 +187,8 @@ function generateMeeple(terrain, startX, startY) {
         const x = startX + Math.random() * 500;
         const y = startY + Math.random() * 500;
         me = new Meeple(x, y, MY_SIZE, MY_VELOCITY, MY_COLOR);
-        me.collisionMap = terrain.calcPartial(me, PIXEL_RATIO * 2, PIXEL_RATIO * 2);
+        me.collisionMap = terrain.calcPartial(me, PIXEL_RATIO + me.radius, PIXEL_RATIO + me.radius);
         me.checkForCollision();
-        console.log('generated');
     } while (me.overlap === true);
     return me;
 }
