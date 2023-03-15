@@ -71,7 +71,7 @@ function init() {
 }
 
 function animate() {
-    console.time('animate');
+    // console.time('animate');
 
     requestAnimationFrame(animate);
     c.clearRect(0, 0, canvas.width, canvas.height);
@@ -80,9 +80,10 @@ function animate() {
     terrain.displayed = me.adjustFrame(terrain.displayed);
     terrain.draw(terrain.displayed);
     me.update();
+
     // drawAtMousePointer(terrain);
 
-    console.timeEnd('animate');
+    // console.timeEnd('animate');
 }
 
 // Excecution
@@ -99,37 +100,37 @@ addEventListener('wheel', function (e) {
 
 addEventListener('keydown', function (e) {
     if (e.key === 'ArrowUp' || e.key === 'w') {
-        me.controller.up.pressed = true;
+        me.controller.up = true;
     }
 
     if (e.key === 'ArrowDown' || e.key === 's') {
-        me.controller.down.pressed = true;
+        me.controller.down = true;
     }
 
     if (e.key === 'ArrowLeft' || e.key === 'a') {
-        me.controller.left.pressed = true;
+        me.controller.left = true;
     }
 
     if (e.key === 'ArrowRight' || e.key === 'd') {
-        me.controller.right.pressed = true;
+        me.controller.right = true;
     }
 });
 
 addEventListener('keyup', function (e) {
     if (e.key === 'ArrowUp' || e.key === 'w') {
-        me.controller.up.pressed = false;
+        me.controller.up = false;
     }
 
     if (e.key === 'ArrowDown' || e.key === 's') {
-        me.controller.down.pressed = false;
+        me.controller.down = false;
     }
 
     if (e.key === 'ArrowLeft' || e.key === 'a') {
-        me.controller.left.pressed = false;
+        me.controller.left = false;
     }
 
     if (e.key === 'ArrowRight' || e.key === 'd') {
-        me.controller.right.pressed = false;
+        me.controller.right = false;
     }
 });
 

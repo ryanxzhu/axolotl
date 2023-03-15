@@ -2,6 +2,7 @@ const MY_SIZE = 20;
 const MY_VELOCITY = 2;
 const MY_COLOR = 'hsl(300, 100%, 50%)';
 const BOUNCE_DRAG = 0.66;
+const DEFAULT_ACCELERATION = 0.3;
 
 class Meeple {
     constructor(x, y, radius, velocity, color) {
@@ -15,9 +16,9 @@ class Meeple {
             adjustment: 1.005,
         };
         this.velocity = velocity;
-        this.maxVelocity = 5;
-        this.acceleration = 0.15;
-        this.naturalDeceleration = 0.98;
+        this.maxVelocity = 9;
+        this.acceleration = DEFAULT_ACCELERATION;
+        this.naturalDeceleration = 0.96;
         this.color = color;
         this.minDistanceFromWall = this.radius + PIXEL_RATIO / 2;
         this.angle = Math.random() * 2 * Math.PI;
@@ -29,10 +30,10 @@ class Meeple {
         this.adjustedY = 0;
         this.collisionMap = [];
         this.controller = {
-            up: { pressed: false, func: this.accelerate },
-            down: { pressed: false, func: this.decelerate },
-            left: { pressed: false, func: this.turnLeft },
-            right: { pressed: false, func: this.turnRight },
+            up: false,
+            down: false,
+            left: false,
+            right: false,
         };
     }
 
@@ -95,19 +96,30 @@ class Meeple {
         }
     }
 
-    calcBounceAngle(xWall, yWall) {
+    resetWithin2PI() {
+        this.angle = this.angle < 0 ? this.angle + Math.PI * 2 : this.angle;
+        this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
+
+        // return angle;
+    }
+
+    calcBounceAngle(xWall, yWall, adjustment = 0) {
         const xDirection = xWall - this.x;
         const yDirection = yWall - this.y;
         const resultantVelocity = this.resultantVelocity(xDirection, yDirection);
-        const angleOfDirection = this.angleOfDirection(xDirection, yDirection, resultantVelocity);
+        let angleOfDirection =
+            this.angleOfDirection(xDirection, yDirection, resultantVelocity) + adjustment;
+        angleOfDirection = angleOfDirection < 0 ? angleOfDirection + Math.PI * 2 : angleOfDirection;
+        angleOfDirection =
+            angleOfDirection >= Math.PI * 2 ? angleOfDirection - Math.PI * 2 : angleOfDirection;
         return angleOfDirection;
     }
 
     changeAngle() {
         this.angle =
             Math.random() < 0.5 ? this.angle + this.angleChange : this.angle - this.angleChange;
-        this.angle = this.angle < 0 ? this.angle + Math.PI * 2 : this.angle;
-        this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
+        this.resetWithin2PI();
+        // this.angle = this.resetWithin2PI(this.angle);
     }
 
     checkForCollision(overlap = false) {
@@ -123,31 +135,46 @@ class Meeple {
                     overlap === false
                 ) {
                     this.overlap = true;
-                    this.velocity = this.velocity * BOUNCE_DRAG;
-                    if (this.velocity < 0.3) {
-                        this.velocity = 0.3; // necessary to prevent the meeple going into the wall
+                    this.acceleration = 0;
+
+                    if (this.velocity >= 0) {
+                        this.angle = this.calcBounceAngle(
+                            this.collisionMap[i][j].x,
+                            this.collisionMap[i][j].y
+                        );
+                        if (this.velocity < 0.4) {
+                            this.velocity = 0.4;
+                        }
+                    } else if (this.velocity < 0) {
+                        this.angle = this.calcBounceAngle(
+                            this.collisionMap[i][j].x,
+                            this.collisionMap[i][j].y,
+                            Math.PI
+                        );
+
+                        if (this.velocity > -0.4) {
+                            this.velocity = -0.4;
+                        }
                     }
-                    this.angle = this.calcBounceAngle(
-                        this.collisionMap[i][j].x,
-                        this.collisionMap[i][j].y
-                    );
+
+                    this.resetWithin2PI();
 
                     this.velocity = -this.velocity;
+
                     return;
                 }
             }
         }
         this.overlap = false;
+        this.acceleration = DEFAULT_ACCELERATION;
     }
 
     adjustFrame(terrain) {
-        const xAdjustment = this.x;
-        const yAdjustment = this.y;
         terrain = terrain.map((row) => {
             return row.map((cell) => {
                 return {
-                    x: cell.x - xAdjustment + this.adjustedX,
-                    y: cell.y - yAdjustment + this.adjustedY,
+                    x: cell.x - this.x + this.adjustedX,
+                    y: cell.y - this.y + this.adjustedY,
                     wallType: cell.wallType,
                 };
             });
@@ -157,13 +184,13 @@ class Meeple {
     }
 
     accelerate() {
-        if (Math.abs(this.velocity) <= this.maxVelocity) {
+        if (this.velocity <= this.maxVelocity) {
             this.velocity += this.acceleration;
         }
     }
 
     decelerate() {
-        if (Math.abs(this.velocity) <= this.maxVelocity) {
+        if (this.velocity >= -this.maxVelocity) {
             this.velocity -= this.acceleration;
         }
     }
@@ -175,28 +202,26 @@ class Meeple {
     turnLeft() {
         this.angle =
             this.velocity >= 0 ? this.angle + this.angleChange : this.angle - this.angleChange;
-        this.angle = this.angle < 0 ? this.angle + Math.PI * 2 : this.angle;
-        this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
+        this.resetWithin2PI();
     }
 
     turnRight() {
         this.angle =
             this.velocity >= 0 ? this.angle - this.angleChange : this.angle + this.angleChange;
-        this.angle = this.angle < 0 ? this.angle + Math.PI * 2 : this.angle;
-        this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
+        this.resetWithin2PI();
     }
 
     updateAngleAndVelocity() {
-        if (this.controller.up.pressed) {
+        if (this.controller.up) {
             this.accelerate();
         }
-        if (this.controller.down.pressed) {
+        if (this.controller.down) {
             this.decelerate();
         }
-        if (this.controller.left.pressed) {
+        if (this.controller.left) {
             this.turnLeft();
         }
-        if (this.controller.right.pressed) {
+        if (this.controller.right) {
             this.turnRight();
         }
     }

@@ -12,6 +12,11 @@ const COLORS = {
     // [WALL]: 'hsl(173, 89%, 11%)',
     // [OPEN_SPACE]: 'hsl(178, 100%, 95%)',
 };
+const COLORS2 = {
+    [WALL]: 'red',
+    [OPEN_SPACE]: 'hsl(18, 100%, 95%)',
+};
+
 const PIXEL_RATIO = 50;
 const MATRIX_DIMENSIONS = {
     height: DUNGEON_HEIGHT / PIXEL_RATIO,
