@@ -7,10 +7,10 @@ const WHITE_LEVEL = 0.53;
 const WALL = 0;
 const OPEN_SPACE = 1;
 const COLORS = {
-    [WALL]: 'hsl(18, 89%, 11%)',
-    [OPEN_SPACE]: 'hsl(18, 100%, 95%)',
-    // [WALL]: 'hsl(173, 89%, 11%)',
-    // [OPEN_SPACE]: 'hsl(178, 100%, 95%)',
+    // [WALL]: 'hsl(18, 89%, 11%)',
+    // [OPEN_SPACE]: 'hsl(18, 100%, 95%)',
+    [WALL]: 'hsl(173, 89%, 11%)',
+    [OPEN_SPACE]: 'hsl(178, 100%, 95%)',
 };
 const COLORS2 = {
     [WALL]: 'red',
@@ -106,10 +106,10 @@ class Terrain {
     findCorners(meeple, xOffset, yOffset) {
         const firstRow = this.full[0].map((pixel) => pixel.x);
         const column = this.full.map((row) => row[0].y);
-        const x1 = this.binarySearch(firstRow, meeple.x - xOffset * 1.1, 0);
-        const x2 = this.binarySearch(firstRow, meeple.x + xOffset * 1.1, 1);
-        const y1 = this.binarySearch(column, meeple.y - yOffset * 1.1, 0);
-        const y2 = this.binarySearch(column, meeple.y + yOffset * 1.1, 1);
+        const x1 = binarySearch(firstRow, meeple.x - xOffset * 1.1, 0);
+        const x2 = binarySearch(firstRow, meeple.x + xOffset * 1.1, 1);
+        const y1 = binarySearch(column, meeple.y - yOffset * 1.1, 0);
+        const y2 = binarySearch(column, meeple.y + yOffset * 1.1, 1);
 
         return { x1, x2, y1, y2 };
     }
@@ -142,20 +142,5 @@ class Terrain {
                 c.closePath();
             }
         }
-    }
-
-    binarySearch(row, target, offset = 0) {
-        let left = 0;
-        let right = row.length - 1;
-        let middle = Math.floor((left + right) / 2);
-        while (left < right) {
-            if (row[middle] < target) {
-                left = middle + 1;
-            } else {
-                right = middle;
-            }
-            middle = Math.floor((left + right) / 2);
-        }
-        return middle - offset;
     }
 }

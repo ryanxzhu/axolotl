@@ -1,6 +1,7 @@
 const MY_SIZE = 20;
 const MY_VELOCITY = 2;
-const MY_COLOR = 'hsl(300, 100%, 50%)';
+// const MY_COLOR = 'hsl(300, 100%, 50%)';
+const MY_COLOR = '#ffbda2';
 const BOUNCE_DRAG = 0.66;
 const DEFAULT_ACCELERATION = 0.3;
 
@@ -15,6 +16,14 @@ class Meeple {
             maxRadius: this.radius * 1.1,
             adjustment: 1.005,
         };
+        this.eyeDistanceFromCenterRatio = 0.5;
+        this.eyeOffsetAngle = Math.PI / 4;
+        this.eyeSizeRatio = 0.3;
+        this.eyeColor = 'white';
+        this.pupilDistanceFromCenterRatio = 0.55;
+        this.pupilOffsetAngle = Math.PI / 5;
+        this.pupilSizeRatio = 0.13;
+        this.pupilColor = 'black';
         this.velocity = velocity;
         this.maxVelocity = 9;
         this.acceleration = DEFAULT_ACCELERATION;
@@ -96,13 +105,6 @@ class Meeple {
         }
     }
 
-    resetWithin2PI() {
-        this.angle = this.angle < 0 ? this.angle + Math.PI * 2 : this.angle;
-        this.angle = this.angle >= Math.PI * 2 ? this.angle - Math.PI * 2 : this.angle;
-
-        // return angle;
-    }
-
     calcBounceAngle(xWall, yWall, adjustment = 0) {
         const xDirection = xWall - this.x;
         const yDirection = yWall - this.y;
@@ -118,8 +120,8 @@ class Meeple {
     changeAngle() {
         this.angle =
             Math.random() < 0.5 ? this.angle + this.angleChange : this.angle - this.angleChange;
-        this.resetWithin2PI();
-        // this.angle = this.resetWithin2PI(this.angle);
+
+        this.angle = resetWithin2PI(this.angle);
     }
 
     checkForCollision(overlap = false) {
@@ -157,7 +159,7 @@ class Meeple {
                         }
                     }
 
-                    this.resetWithin2PI();
+                    this.angle = resetWithin2PI(this.angle);
 
                     this.velocity = -this.velocity;
 
@@ -202,13 +204,13 @@ class Meeple {
     turnLeft() {
         this.angle =
             this.velocity >= 0 ? this.angle + this.angleChange : this.angle - this.angleChange;
-        this.resetWithin2PI();
+        this.angle = resetWithin2PI(this.angle);
     }
 
     turnRight() {
         this.angle =
             this.velocity >= 0 ? this.angle - this.angleChange : this.angle + this.angleChange;
-        this.resetWithin2PI();
+        this.angle = resetWithin2PI(this.angle);
     }
 
     updateAngleAndVelocity() {
@@ -245,6 +247,51 @@ class Meeple {
         }
     }
 
+    drawCircles(distanceFromCenterRatio, offsetAngle, sizeRatio, color) {
+        const distFromCenter = this.radius * distanceFromCenterRatio;
+        let angle = this.angle + offsetAngle;
+        angle = resetWithin2PI(angle);
+
+        // not actually finding X and Y velocity. Just using the same function to find the X and Y coordinates of the eyes
+        const xLocation = this.adjustedX + this.findXVelocity(angle, distFromCenter);
+        const yLocation = this.adjustedY + this.findYVelocity(angle, distFromCenter);
+
+        c.beginPath();
+        c.arc(xLocation, yLocation, this.radius * sizeRatio, 0, Math.PI * 2);
+        c.fillStyle = color;
+        c.fill();
+        c.closePath();
+    }
+
+    drawEyes() {
+        this.drawCircles(
+            this.eyeDistanceFromCenterRatio,
+            this.eyeOffsetAngle,
+            this.eyeSizeRatio,
+            this.eyeColor
+        );
+        this.drawCircles(
+            this.eyeDistanceFromCenterRatio,
+            -this.eyeOffsetAngle,
+            this.eyeSizeRatio,
+            this.eyeColor
+        );
+
+        this.drawCircles(
+            this.pupilDistanceFromCenterRatio,
+            this.pupilOffsetAngle,
+            this.pupilSizeRatio,
+            this.pupilColor
+        );
+
+        this.drawCircles(
+            this.pupilDistanceFromCenterRatio,
+            -this.pupilOffsetAngle,
+            this.pupilSizeRatio,
+            this.pupilColor
+        );
+    }
+
     draw() {
         c.beginPath();
         c.arc(this.adjustedX, this.adjustedY, this.bulgingRadius.radius, 0, Math.PI * 2);
@@ -264,6 +311,7 @@ class Meeple {
         this.x += this.xVelocity;
         this.y += this.yVelocity;
         this.draw();
+        this.drawEyes();
     }
 }
 
