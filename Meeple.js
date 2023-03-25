@@ -25,7 +25,7 @@ class Meeple {
         this.pupilSizeRatio = 0.13;
         this.pupilColor = 'black';
         this.velocity = velocity;
-        this.maxVelocity = 9;
+        this.maxVelocity = 5;
         this.acceleration = DEFAULT_ACCELERATION;
         this.naturalDeceleration = 0.96;
         this.color = color;

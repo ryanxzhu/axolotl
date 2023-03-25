@@ -2,7 +2,7 @@ body {
     margin: 0;
     cursor: none;
     /* height: 50000px; */
-    /* overflow: hidden; */
+    overflow: hidden;
 }
 
 /* #container {
@@ -24,4 +24,6 @@ canvas {
     height: 1000px; */
     position: absolute;
     margin: 0;
+    top: -5px;
+    left: -5px;
 }
