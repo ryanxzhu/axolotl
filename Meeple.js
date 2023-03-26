@@ -25,7 +25,7 @@ class Meeple {
         this.pupilSizeRatio = 0.13;
         this.pupilColor = 'black';
         this.velocity = velocity;
-        this.maxVelocity = 5;
+        this.maxVelocity = 10;
         this.acceleration = DEFAULT_ACCELERATION;
         this.naturalDeceleration = 0.96;
         this.color = color;
@@ -44,29 +44,32 @@ class Meeple {
             left: false,
             right: false,
         };
+        this.targetX = null;
+        this.targetY = null;
     }
 
     resultantVelocity(xVelocity = this.xVelocity, yVelocity = this.yVelocity) {
-        return Math.sqrt(Math.pow(xVelocity, 2) + Math.pow(yVelocity, 2));
+        return Math.hypot(xVelocity, yVelocity);
     }
 
-    angleOfDirection(
-        xVelocity = this.xVelocity,
-        yVelocity = this.yVelocity,
-        velocity = this.velocity
-    ) {
+    angleOfDirection(xVelocity = this.xVelocity, yVelocity = this.yVelocity) {
         if (xVelocity >= 0 && yVelocity >= 0) {
-            return Math.asin(xVelocity / velocity);
+            return Math.atan(xVelocity / yVelocity);
         }
         if (xVelocity >= 0 && yVelocity <= 0) {
-            return Math.PI / 2 + Math.acos(xVelocity / velocity);
+            return Math.PI / 2 + Math.atan(Math.abs(yVelocity) / xVelocity);
         }
         if (xVelocity <= 0 && yVelocity <= 0) {
-            return Math.PI + Math.asin(Math.abs(xVelocity) / velocity);
+            return Math.PI + Math.atan(Math.abs(xVelocity) / Math.abs(yVelocity));
         }
         if (xVelocity <= 0 && yVelocity >= 0) {
-            return (Math.PI * 3) / 2 + Math.asin(yVelocity / velocity);
+            return (Math.PI * 3) / 2 + Math.atan(yVelocity / Math.abs(xVelocity));
         }
+    }
+
+    findAngleFromPoint(x1, y1, x2, y2) {
+        const angle = this.angleOfDirection(x1 - x2, y1 - y2);
+        return resetWithin2PI(angle);
     }
 
     findXVelocity(angle = this.angle, velocity = this.velocity) {
@@ -108,13 +111,8 @@ class Meeple {
     calcBounceAngle(xWall, yWall, adjustment = 0) {
         const xDirection = xWall - this.x;
         const yDirection = yWall - this.y;
-        const resultantVelocity = this.resultantVelocity(xDirection, yDirection);
-        let angleOfDirection =
-            this.angleOfDirection(xDirection, yDirection, resultantVelocity) + adjustment;
-        angleOfDirection = angleOfDirection < 0 ? angleOfDirection + Math.PI * 2 : angleOfDirection;
-        angleOfDirection =
-            angleOfDirection >= Math.PI * 2 ? angleOfDirection - Math.PI * 2 : angleOfDirection;
-        return angleOfDirection;
+        const angleOfDirection = this.angleOfDirection(xDirection, yDirection) + adjustment;
+        return resetWithin2PI(angleOfDirection);
     }
 
     changeAngle() {
@@ -162,6 +160,9 @@ class Meeple {
                     this.angle = resetWithin2PI(this.angle);
 
                     this.velocity = -this.velocity;
+
+                    this.targetX = null;
+                    this.targetY = null;
 
                     return;
                 }
@@ -225,6 +226,20 @@ class Meeple {
         }
         if (this.controller.right) {
             this.turnRight();
+        }
+    }
+
+    checkForClick() {
+        if (this.targetX && this.targetY) {
+            this.velocity = 10;
+            this.angle = this.findAngleFromPoint(
+                this.targetX,
+                this.targetY,
+                this.adjustedX,
+                this.adjustedY
+            );
+            this.targetX = null;
+            this.targetY = null;
         }
     }
 
@@ -303,13 +318,16 @@ class Meeple {
     update() {
         this.bulging();
         this.checkForCollision(this.overlap);
+        this.checkForClick();
         this.updateAngleAndVelocity();
         // this.changeAngle();
         this.naturallyDecelerate();
+
         this.xVelocity = this.findXVelocity();
         this.yVelocity = this.findYVelocity();
         this.x += this.xVelocity;
         this.y += this.yVelocity;
+
         this.draw();
         this.drawEyes();
     }

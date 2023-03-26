@@ -16,6 +16,12 @@ canvasContainer.style.height = window.innerHeight + 'px';
 canvasContainer.style.width = window.innerWidth + 'px';
 container.style.height = window.innerHeight + 'px';
 
+const mouse = {
+    x: null,
+    y: null,
+    radius: 20,
+};
+
 function drawAtMousePointer(terrain) {
     c.beginPath();
     const mouseCollisionMap = terrain.calcPartial(
@@ -98,6 +104,11 @@ addEventListener('wheel', function (e) {
     mouse.y = e.offsetY;
 });
 
+addEventListener('mousedown', (e) => {
+    me.targetX = e.offsetX;
+    me.targetY = e.offsetY;
+});
+
 addEventListener('keydown', function (e) {
     if (e.key === 'ArrowUp' || e.key === 'w') {
         me.controller.up = true;
@@ -141,12 +152,6 @@ console.timeEnd('terrain generation');
 console.time('meeple generation');
 const me = generateMeeple(terrain, CANVAS_WIDTH / 5, CANVAS_HEIGHT / 5);
 console.timeEnd('meeple generation');
-
-const mouse = {
-    x: null,
-    y: null,
-    radius: 20,
-};
 
 init();
 animate();
