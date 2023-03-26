@@ -105,6 +105,7 @@ addEventListener('wheel', function (e) {
 });
 
 addEventListener('mousedown', (e) => {
+    e.preventDefault();
     me.targetX = e.offsetX;
     me.targetY = e.offsetY;
 });
