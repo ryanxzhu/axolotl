@@ -7,10 +7,10 @@ const WHITE_LEVEL = 0.53;
 const WALL = 0;
 const OPEN_SPACE = 1;
 const COLORS = {
-    // [WALL]: 'hsl(18, 89%, 11%)',
-    // [OPEN_SPACE]: 'hsl(18, 100%, 95%)',
-    [WALL]: 'hsl(173, 89%, 11%)',
-    [OPEN_SPACE]: 'hsl(178, 100%, 95%)',
+    [WALL]: 'hsl(18, 89%, 11%)',
+    [OPEN_SPACE]: 'hsl(18, 100%, 95%)',
+    // [WALL]: 'hsl(173, 89%, 11%)',
+    // [OPEN_SPACE]: 'hsl(178, 100%, 95%)',
 };
 const COLORS2 = {
     [WALL]: 'red',
