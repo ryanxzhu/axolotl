@@ -15,4 +15,5 @@ body {
 canvas {
     position: absolute;
     margin: 0;
+    -webkit-tap-highlight-color: transparent;
 }

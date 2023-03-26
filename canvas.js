@@ -105,8 +105,11 @@ addEventListener('wheel', function (e) {
 });
 
 addEventListener('mousedown', (e) => {
-    me.targetX = e.offsetX;
-    me.targetY = e.offsetY;
+    me.controller.mousedown = true;
+});
+
+addEventListener('mouseup', (e) => {
+    me.controller.mousedown = false;
 });
 
 addEventListener('keydown', function (e) {

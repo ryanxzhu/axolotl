@@ -43,6 +43,7 @@ class Meeple {
             down: false,
             left: false,
             right: false,
+            mousedown: false,
         };
         this.targetX = null;
         this.targetY = null;
@@ -230,16 +231,9 @@ class Meeple {
     }
 
     checkForClick() {
-        if (this.targetX && this.targetY) {
-            this.velocity = 10;
-            this.angle = this.findAngleFromPoint(
-                this.targetX,
-                this.targetY,
-                this.adjustedX,
-                this.adjustedY
-            );
-            this.targetX = null;
-            this.targetY = null;
+        if (this.controller.mousedown && !this.overlap) {
+            this.velocity = 5;
+            this.angle = this.findAngleFromPoint(mouse.x, mouse.y, this.adjustedX, this.adjustedY);
         }
     }
 
@@ -317,8 +311,8 @@ class Meeple {
 
     update() {
         this.bulging();
-        this.checkForCollision(this.overlap);
         this.checkForClick();
+        this.checkForCollision(this.overlap);
         this.updateAngleAndVelocity();
         // this.changeAngle();
         this.naturallyDecelerate();
