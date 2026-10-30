@@ -7,6 +7,10 @@ const canvas = document.querySelector('canvas');
 const canvasContainer = document.querySelector('#canvas-container');
 const container = document.querySelector('#container');
 const c = canvas.getContext('2d');
+const chompsDisplay = document.querySelector('#chomps');
+const chompsText = chompsDisplay.querySelector('span');
+const CHOMPS_TOP = 24; // distance from the top of the screen to the chomps counter
+let chomps = 0;
 
 // square canvas, sized by the shorter screen side (usually height on a laptop) and pinned to the left
 function sizeCanvas() {
@@ -19,6 +23,11 @@ function sizeCanvas() {
     canvasContainer.style.height = window.innerHeight + 'px';
     canvasContainer.style.width = window.innerWidth + 'px';
     container.style.height = window.innerHeight + 'px';
+    // the counter spans the whole area right of the canvas, so its centred text sits in the middle of it
+    const canvasRight = CANVAS_PADDING + size + CANVAS_BORDER * 2;
+    chompsDisplay.style.left = canvasRight + 'px';
+    chompsDisplay.style.width = window.innerWidth - canvasRight + 'px';
+    chompsDisplay.style.top = CHOMPS_TOP + 'px';
     CENTRE_PIXEL_X = size / 2;
     CENTRE_PIXEL_Y = size / 2;
 }
@@ -85,13 +94,33 @@ function init() {
     me.adjustedY = CENTRE_PIXEL_Y;
 }
 
+// defined once rather than inline, so the game loop doesn't create a new function every frame
+function onFoodEaten(x, y, amount) {
+    scorePopups.add(x, y, amount);
+    biteSounds.play();
+}
+
 function animate() {
     // console.time('animate');
 
     requestAnimationFrame(animate);
     c.clearRect(0, 0, canvas.width, canvas.height);
     terrain.drawView(me);
+    food.drawView(me);
     me.update();
+
+    const gained = food.eatTouching(me, onFoodEaten);
+    if (gained > 0) {
+        chomps += gained;
+        chompsText.textContent = `Chomps: ${chomps}`;
+        // a small bounce
+        chompsText.animate(
+            [{ transform: 'scale(1)' }, { transform: 'scale(1.07)' }, { transform: 'scale(1)' }],
+            { duration: 260, easing: 'ease-out' }
+        );
+        me.startEating();
+    }
+    scorePopups.draw(me);
 
     // drawAtMousePointer(terrain);
 
@@ -112,52 +141,58 @@ addEventListener('resize', function () {
     init();
 });
 
-addEventListener('mousemove', updateMousePosition);
+addEventListener('mousemove', (e) => {
+    updateMousePosition(e);
+    // the button was let go somewhere we didn't see (e.g. outside the window), so stop swimming
+    if (me.controller.mousedown && (e.buttons & 1) === 0) me.controller.mousedown = false;
+});
 
 addEventListener('wheel', updateMousePosition);
 
 addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return; // only the left button swims
+    // stops the browser starting a text selection or drag, which would swallow mouse movement
+    e.preventDefault();
     updateMousePosition(e);
+    // each click kicks, just like a tap of W
+    if (!me.controller.mousedown) me.startBurst();
     me.controller.mousedown = true;
 });
 
 addEventListener('mouseup', (e) => {
+    if (e.button === 0) me.controller.mousedown = false;
+});
+
+// a right-click or two-finger tap would open the browser menu, which takes over the mouse until dismissed
+addEventListener('contextmenu', (e) => e.preventDefault());
+
+// switching away (e.g. alt-tab) means we never see the keys or button being released, so let go of everything
+addEventListener('blur', () => {
+    me.controller.up = false;
+    me.controller.down = false;
     me.controller.mousedown = false;
 });
 
+// e.code is the physical key, so W still works with caps lock or shift held, and its release is always matched
 addEventListener('keydown', function (e) {
-    if (e.key === 'ArrowUp' || e.key === 'w') {
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+        // a fresh press kicks; the keyboard's auto-repeat while held doesn't
+        if (!e.repeat && !me.controller.up) me.startBurst();
         me.controller.up = true;
     }
 
-    if (e.key === 'ArrowDown' || e.key === 's') {
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') {
         me.controller.down = true;
-    }
-
-    if (e.key === 'ArrowLeft' || e.key === 'a') {
-        me.controller.left = true;
-    }
-
-    if (e.key === 'ArrowRight' || e.key === 'd') {
-        me.controller.right = true;
     }
 });
 
 addEventListener('keyup', function (e) {
-    if (e.key === 'ArrowUp' || e.key === 'w') {
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') {
         me.controller.up = false;
     }
 
-    if (e.key === 'ArrowDown' || e.key === 's') {
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') {
         me.controller.down = false;
-    }
-
-    if (e.key === 'ArrowLeft' || e.key === 'a') {
-        me.controller.left = false;
-    }
-
-    if (e.key === 'ArrowRight' || e.key === 'd') {
-        me.controller.right = false;
     }
 });
 
@@ -168,6 +203,16 @@ console.timeEnd('terrain generation');
 console.time('meeple generation');
 const me = generateMeeple(terrain, CANVAS_WIDTH / 5, CANVAS_HEIGHT / 5);
 console.timeEnd('meeple generation');
+
+console.time('food generation');
+const food = new FoodField(terrain, me);
+console.timeEnd('food generation');
+
+const scorePopups = new ScorePopups();
+const biteSounds = new BiteSounds();
+// sound can only start after the player interacts with the page
+addEventListener('mousedown', () => biteSounds.unlock());
+addEventListener('keydown', () => biteSounds.unlock());
 
 init();
 animate();

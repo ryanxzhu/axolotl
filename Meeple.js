@@ -4,11 +4,25 @@ const MY_VELOCITY = 2;
 const MY_COLOR = '#ffb6c8';
 const GILL_COLOR = '#ff6f91';
 const OUTLINE_COLOR = 'hsl(340, 45%, 45%)';
-const DEFAULT_ACCELERATION = 0.3;
+const MOUTH_COLOR = 'hsl(345, 55%, 30%)';
+const MOUTH_OPEN_FRAMES = 7; // length of one open-and-close bite
+const DEFAULT_ACCELERATION = 0.3 * GAME_SPEED;
 // slowest speed a bounce sends the axolotl away from a wall at
-const MIN_BOUNCE_VELOCITY = 0.4;
+const MIN_BOUNCE_VELOCITY = 0.4 * GAME_SPEED;
 // how fast it swings round to its new heading after a bounce, in radians per frame
-const BOUNCE_TURN_RATE = 0.12;
+const BOUNCE_TURN_RATE = 0.12 * GAME_SPEED;
+// longest single move between rock checks; smaller than the smallest body circle so it can't skip a wall
+const COLLISION_STEP_PX = 4;
+// every tap of W gives a quick kick: strong acceleration up to a higher top speed for a moment, after which
+// water drag eases it back down to the normal top speed. So tapping W repeatedly is deliberately the fastest
+// way to swim, faster than holding it.
+const BURST_SPEED_MULTIPLIER = 2; // kick top speed, as a multiple of the normal (held) top speed
+const BURST_ACCELERATION = 0.6 * GAME_SPEED;
+const BURST_FRAMES = 12; // how long each kick keeps pushing
+// each kick whips the tail to show the push: a fast, wide beat or two, then back to normal swimming
+const WHIP_FRAMES = 16; // how long the whip lasts
+const WHIP_BEATS = 1.5; // how many full side-to-side beats fit in it
+const WHIP_AMPLITUDE = 1.8; // how wide it swings, as a multiple of the normal widest swing
 // the body as a few circles along its length, in local units of radius: [distance forward, circle radius]
 const BODY_CIRCLES = [
     [0.55, 0.62], // head
@@ -36,7 +50,7 @@ class Meeple {
             speed: 0.03, // phase advanced per unit of velocity, so a faster swim means a faster wiggle
         };
         this.velocity = velocity;
-        this.maxVelocity = 10;
+        this.maxVelocity = 2.5 * GAME_SPEED;
         this.acceleration = DEFAULT_ACCELERATION;
         this.naturalDeceleration = 0.96;
         this.color = color;
@@ -44,8 +58,10 @@ class Meeple {
         this.angleChange = 0.05;
         this.xVelocity = 0;
         this.yVelocity = 0;
-        this.overlap = false;
         this.bounceTargetAngle = null; // heading it's swinging round to after a bounce
+        this.mouthFrames = 0; // counts down while the eating animation plays
+        this.burstFrames = 0; // counts down while a W kick is pushing
+        this.whipFrames = 0; // counts down while the kick's tail whip plays
         this.adjustedX = 0;
         this.adjustedY = 0;
         this.terrain = null;
@@ -53,8 +69,6 @@ class Meeple {
         this.controller = {
             up: false,
             down: false,
-            left: false,
-            right: false,
             mousedown: false,
         };
         this.targetX = null;
@@ -175,7 +189,7 @@ class Meeple {
     }
 
     // pushes the body out of the rock it overlaps, bouncing off the first surface it's moving into.
-    // Like before, a bounce stops swimming and mouse steering for one frame so it can get clear.
+    // Returns whether it bounced.
     resolveWallCollisions() {
         let bounced = false;
         for (let pass = 0; pass < 2; pass++) {
@@ -200,61 +214,75 @@ class Meeple {
             }
             if (!touched) break;
         }
+        return bounced;
+    }
 
-        this.overlap = bounced;
+    // moves this frame's distance in small steps, checking the rock after each, so a high GAME_SPEED can't
+    // carry the body straight through a thin wall in one jump. Like before, a bounce stops swimming and
+    // swimming for the next frame so it can get clear.
+    move() {
+        const steps = Math.max(1, Math.ceil(Math.abs(this.velocity) / COLLISION_STEP_PX));
+        let bounced = false;
+        for (let step = 0; step < steps; step++) {
+            this.xVelocity = this.findXVelocity();
+            this.yVelocity = this.findYVelocity();
+            this.x += this.xVelocity / steps;
+            this.y += this.yVelocity / steps;
+            if (this.resolveWallCollisions()) bounced = true;
+        }
         this.acceleration = bounced ? 0 : DEFAULT_ACCELERATION;
     }
 
+    // called on every fresh press of W (not key repeat)
+    startBurst() {
+        this.burstFrames = BURST_FRAMES;
+        this.whipFrames = WHIP_FRAMES;
+    }
+
+    // a W kick: pushes hard towards the higher kick top speed. Runs for its full length even if W is
+    // released straight away, so a quick tap still gets the whole kick.
+    kick() {
+        if (this.acceleration === 0) return; // just bounced off a wall
+        const cap = this.maxVelocity * BURST_SPEED_MULTIPLIER;
+        if (this.velocity < cap) this.velocity = Math.min(this.velocity + BURST_ACCELERATION, cap);
+    }
+
     accelerate() {
-        if (this.velocity <= this.maxVelocity) {
-            this.velocity += this.acceleration;
+        // only pushes up to the normal top speed; above it (just after a kick) drag slows it rather than
+        // snapping it straight down
+        if (this.velocity < this.maxVelocity) {
+            this.velocity = Math.min(this.velocity + this.acceleration, this.maxVelocity);
         }
     }
 
     decelerate() {
-        if (this.velocity >= -this.maxVelocity) {
-            this.velocity -= this.acceleration;
-        }
+        this.velocity = Math.max(this.velocity - this.acceleration, -this.maxVelocity);
     }
 
     naturallyDecelerate() {
         this.velocity *= this.naturalDeceleration;
     }
 
-    turnLeft() {
-        this.angle =
-            this.velocity >= 0 ? this.angle + this.angleChange : this.angle - this.angleChange;
-        this.angle = resetWithin2PI(this.angle);
-    }
-
-    turnRight() {
-        this.angle =
-            this.velocity >= 0 ? this.angle - this.angleChange : this.angle + this.angleChange;
-        this.angle = resetWithin2PI(this.angle);
-    }
-
+    // steering comes from the mouse (faceMouse), so the controls only swim forwards and backwards.
+    // The left mouse button works exactly like W: each click kicks, holding cruises at top speed.
     updateAngleAndVelocity() {
-        if (this.controller.up) {
+        if (this.burstFrames > 0) {
+            this.kick();
+        } else if (this.controller.up || this.controller.mousedown) {
             this.accelerate();
         }
         if (this.controller.down) {
             this.decelerate();
         }
-        if (this.controller.left) {
-            this.turnLeft();
-        }
-        if (this.controller.right) {
-            this.turnRight();
-        }
     }
 
-    checkForClick() {
-        if (this.controller.mousedown && !this.overlap) {
-            // pointing with the mouse takes over from any swing still left from a bounce
-            this.bounceTargetAngle = null;
-            this.velocity = 5;
-            this.angle = this.findAngleFromPoint(mouse.x, mouse.y, this.adjustedX, this.adjustedY);
-        }
+    // always points at the mouse pointer, so W/S swim towards or away from it; overrides turning keys and
+    // the swing after a bounce. Waits until the pointer has been seen, and skips if it's dead centre.
+    faceMouse() {
+        if (mouse.x === null) return;
+        if (mouse.x === this.adjustedX && mouse.y === this.adjustedY) return;
+        this.bounceTargetAngle = null;
+        this.angle = this.findAngleFromPoint(mouse.x, mouse.y, this.adjustedX, this.adjustedY);
     }
 
     bulging() {
@@ -277,6 +305,14 @@ class Meeple {
     }
 
     wiggleTail() {
+        if (this.whipFrames > 0) {
+            // a kick's tail whip: a fast, wide beat or two, regardless of speed
+            this.whipFrames--;
+            this.tail.phase += (Math.PI * 2 * WHIP_BEATS) / WHIP_FRAMES;
+            const whipAmplitude = this.tail.maxAmplitude * WHIP_AMPLITUDE;
+            this.tail.amplitude += (whipAmplitude - this.tail.amplitude) * 0.35;
+            return;
+        }
         // wiggle speed follows velocity (negative when swimming backwards), and the wiggle fades out when stopped
         this.tail.phase += this.velocity * this.tail.speed;
         const targetAmplitude =
@@ -415,6 +451,23 @@ class Meeple {
         c.strokeStyle = this.outlineColor;
         c.stroke();
         c.closePath();
+
+        // while eating, the mouth opens and closes once at the tip of the snout
+        if (this.mouthFrames > 0) {
+            const open = Math.sin(Math.PI * (1 - this.mouthFrames / MOUTH_OPEN_FRAMES));
+            c.beginPath();
+            c.ellipse(0.9 * r, 0, 0.14 * r * open + 0.5, 0.3 * r * open + 0.5, 0, 0, Math.PI * 2);
+            c.fillStyle = MOUTH_COLOR;
+            c.fill();
+            c.lineWidth = 1.2;
+            c.strokeStyle = this.outlineColor;
+            c.stroke();
+            c.closePath();
+        }
+    }
+
+    startEating() {
+        this.mouthFrames = MOUTH_OPEN_FRAMES;
     }
 
     draw() {
@@ -437,17 +490,14 @@ class Meeple {
     update() {
         this.bulging();
         this.wiggleTail();
-        this.checkForClick();
+        if (this.mouthFrames > 0) this.mouthFrames--;
+        if (this.burstFrames > 0) this.burstFrames--;
         this.updateAngleAndVelocity();
         // this.changeAngle();
         this.naturallyDecelerate();
         this.swingAfterBounce();
-
-        this.xVelocity = this.findXVelocity();
-        this.yVelocity = this.findYVelocity();
-        this.x += this.xVelocity;
-        this.y += this.yVelocity;
-        this.resolveWallCollisions();
+        this.faceMouse();
+        this.move();
 
         this.draw();
     }

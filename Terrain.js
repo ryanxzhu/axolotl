@@ -281,6 +281,20 @@ class Terrain {
         return { fill, outline };
     }
 
+    // true if the point is inside the drawn rock (point-in-polygon on that square's wall shape)
+    isRockAt(x, y) {
+        const count = this.squareOutline(Math.floor(y / PIXEL_RATIO), Math.floor(x / PIXEL_RATIO));
+        const xs = this.outlineXs;
+        const ys = this.outlineYs;
+        let inside = false;
+        for (let p = 0, q = count - 1; p < count; q = p++) {
+            if (ys[p] > y !== ys[q] > y && x < ((xs[q] - xs[p]) * (y - ys[p])) / (ys[q] - ys[p]) + xs[p]) {
+                inside = !inside;
+            }
+        }
+        return inside;
+    }
+
     // finds where a circle overlaps the rock surface, keeping the deepest overlap in `contact`
     // (normal pointing out into the water). Returns false when the circle is clear.
     findContact(x, y, radius, contact) {
