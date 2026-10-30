@@ -13,11 +13,40 @@ const speedDisplay = document.querySelector('#speed');
 const SIDE_PANEL_TOP = 24; // distance from the top of the screen to the calories counter
 const SPEED_INSET = 24; // distance of the speed readout from the bottom and from the canvas
 // calories: what can be spent right now. eaten: total ever eaten, which unlocks the upgrades area
-const score = { calories: 0, eaten: 0 };
+const score = { calories: STARTING_CALORIES, eaten: 0 };
 
 function showCalories() {
     caloriesText.textContent = `Calories: ${score.calories}`;
 }
+
+// development readout: calories eaten in the last minute, to see what the upgrades really do.
+// Each meal is stored as a [time, calories] pair in one flat array, and the readout refreshes twice a second
+// rather than every frame.
+const calorieRateDisplay = document.querySelector('#calorie-rate');
+const upgradeTimeDisplay = document.querySelector('#upgrade-time');
+const CALORIE_RATE_WINDOW_MS = 60000;
+const CALORIE_RATE_REFRESH_MS = 500;
+const recentMeals = [];
+
+function recordMeal(calories) {
+    recentMeals.push(performance.now(), calories);
+}
+
+function showCalorieRate() {
+    const cutoff = performance.now() - CALORIE_RATE_WINDOW_MS;
+    let expired = 0;
+    while (expired < recentMeals.length && recentMeals[expired] < cutoff) expired += 2;
+    if (expired > 0) recentMeals.splice(0, expired);
+    let total = 0;
+    for (let i = 1; i < recentMeals.length; i += 2) total += recentMeals[i];
+    calorieRateDisplay.textContent = `Calories/min: ${total.toFixed(1)}`;
+
+    // how long buying every upgrade on show once more would take at this rate: how much the game is slowing down
+    const minutes = upgradeShop.nextLevelsTotalCost() / total;
+    upgradeTimeDisplay.textContent = `Mins to buy all upgrades: ${Number.isFinite(minutes) ? minutes.toFixed(1) : '–'}`;
+}
+
+setInterval(showCalorieRate, CALORIE_RATE_REFRESH_MS);
 
 // square canvas, sized by the shorter screen side (usually height on a laptop) and pinned to the left
 function sizeCanvas() {
@@ -123,6 +152,7 @@ function animate() {
     if (gained > 0) {
         score.calories += gained;
         score.eaten += gained;
+        recordMeal(gained);
         showCalories();
         upgradeShop.refresh();
         // a small bounce
@@ -218,10 +248,12 @@ console.timeEnd('meeple generation');
 
 console.time('food generation');
 const food = new FoodField(terrain, me);
+me.food = food; // so Improve smell can find nearby food
 console.timeEnd('food generation');
 
 const scorePopups = new ScorePopups();
 const upgradeShop = new UpgradeShop(score, me, showCalories);
+showCalories(); // the page's HTML says "Calories: 0", which is wrong if STARTING_CALORIES isn't 0
 const biteSounds = new BiteSounds();
 // sound can only start after the player interacts with the page
 addEventListener('mousedown', () => biteSounds.unlock());

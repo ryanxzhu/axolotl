@@ -36,6 +36,15 @@ const AUTO_STRAIGHT_CHANCE = 0.5; // chance each new stretch goes straight rathe
 // after hitting a wall it stops pushing and turns away from the rock for a moment before swimming on
 const AUTO_RECOVER_FRAMES = 25;
 const AUTO_RECOVER_TURN_RATE = 0.08;
+// Improve smell (during Auto swim): heads for the nearest food inside the smell ring
+const SMELL_SEARCH_INTERVAL = 8; // frames between sniffs while it has nothing to chase
+const SMELL_GIVE_UP_FRAMES = 240; // stop chasing a piece it can't reach (e.g. behind rock) after this long
+const SMELL_SLOW_TURN_ANGLE = 0.6; // if the food is this far off to the side (radians)...
+const SMELL_SLOW_TURN_DISTANCE = 80; // ...and this close (px), stop pushing so it can turn tighter
+const SMELL_RING_COLOR = 'rgba(255, 182, 200, 0.45)';
+// made once, so drawing the dashed ring doesn't create arrays every frame
+const SMELL_RING_DASH = [6, 7];
+const NO_DASH = [];
 // the body as a few circles along its length, in local units of radius: [distance forward, circle radius]
 const BODY_CIRCLES = [
     [0.55, 0.62], // head
@@ -81,6 +90,12 @@ class Meeple {
         this.autoTurn = 0; // current random turn: -1, 0 (straight) or 1
         this.autoStretchFrames = 0; // frames left before picking a new random turn
         this.autoRecoverFrames = 0; // frames left turning away from a wall it just hit
+        this.food = null; // the FoodField, for smelling nearby food
+        this.smellRadius = 0; // reach of the Improve smell upgrade around the head; 0 until bought
+        this.smellTarget = null; // the piece of food it's currently heading for
+        this.smellIgnore = null; // a piece it gave up on, so it doesn't pick it straight back up
+        this.smellSearchCooldown = 0;
+        this.smellGiveUpFrames = 0;
         this.adjustedX = 0;
         this.adjustedY = 0;
         this.terrain = null;
@@ -346,6 +361,8 @@ class Meeple {
         this.autoTurn = 0;
         this.autoStretchFrames = 0;
         this.autoRecoverFrames = 0;
+        this.smellTarget = null;
+        this.smellIgnore = null;
     }
 
     // swims itself: forward at the same top speed as holding W, turning left, right or going straight for
@@ -358,6 +375,8 @@ class Meeple {
             return;
         }
 
+        if (this.smellRadius > 0 && this.followSmell()) return;
+
         if (this.autoStretchFrames <= 0) {
             this.autoTurn = Math.random() < AUTO_STRAIGHT_CHANCE ? 0 : Math.random() < 0.5 ? -1 : 1;
             this.autoStretchFrames = Math.round(randomBetween(AUTO_MIN_STRETCH_FRAMES, AUTO_MAX_STRETCH_FRAMES));
@@ -365,6 +384,51 @@ class Meeple {
         this.autoStretchFrames--;
         this.angle = resetWithin2PI(this.angle + this.autoTurn * AUTO_TURN_RATE);
         this.accelerate();
+    }
+
+    setSmellRadius(radius) {
+        this.smellRadius = radius;
+    }
+
+    // Improve smell: picks the nearest food inside the smell ring and turns towards it at the normal turn rate
+    // (it can't turn instantly), swimming on as it goes. Returns false when there's nothing to smell, so the
+    // autopilot just wanders.
+    followSmell() {
+        const headX = this.x + Math.sin(this.angle) * HEAD_FORWARD * this.radius;
+        const headY = this.y + Math.cos(this.angle) * HEAD_FORWARD * this.radius;
+
+        let target = this.smellTarget;
+        if (target) {
+            const outOfRange = Math.hypot(target.x - headX, target.y - headY) > this.smellRadius * 1.5;
+            this.smellGiveUpFrames--;
+            if (target.eaten || outOfRange || this.smellGiveUpFrames <= 0) {
+                if (!target.eaten) this.smellIgnore = target;
+                target = this.smellTarget = null;
+                this.autoStretchFrames = 0; // pick a fresh wander once it stops chasing
+            }
+        }
+
+        if (!target) {
+            // only sniff every few frames while there's nothing to chase
+            if (this.smellSearchCooldown > 0) {
+                this.smellSearchCooldown--;
+                return false;
+            }
+            this.smellSearchCooldown = SMELL_SEARCH_INTERVAL;
+            target = this.smellTarget = this.food.findNearest(headX, headY, this.smellRadius, this.smellIgnore);
+            if (!target) return false;
+            this.smellGiveUpFrames = SMELL_GIVE_UP_FRAMES;
+        }
+
+        const dx = target.x - headX;
+        const dy = target.y - headY;
+        // angle 0 points along +y and grows towards +x, so the heading towards (dx, dy) is atan2(dx, dy)
+        const offBy = wrapToPi(Math.atan2(dx, dy) - this.angle);
+        this.angle = resetWithin2PI(this.angle + Math.max(-AUTO_TURN_RATE, Math.min(AUTO_TURN_RATE, offBy)));
+        // close and well off to the side: stop pushing so drag slows it and it turns tighter instead of circling
+        const tightTurn = Math.abs(offBy) > SMELL_SLOW_TURN_ANGLE && dx * dx + dy * dy < SMELL_SLOW_TURN_DISTANCE ** 2;
+        if (!tightTurn) this.accelerate();
+        return true;
     }
 
     faceMouse() {
@@ -575,6 +639,18 @@ class Meeple {
             c.lineWidth = 1.5;
             c.strokeStyle = HOOVER_RING_COLOR;
             c.stroke();
+            c.closePath();
+        }
+
+        // the Improve smell reach: a wider, faint dashed pink ring around the head
+        if (this.smellRadius > 0) {
+            c.beginPath();
+            c.arc(HEAD_FORWARD * this.radius, 0, this.smellRadius, 0, Math.PI * 2);
+            c.setLineDash(SMELL_RING_DASH);
+            c.lineWidth = 1.5;
+            c.strokeStyle = SMELL_RING_COLOR;
+            c.stroke();
+            c.setLineDash(NO_DASH);
             c.closePath();
         }
 

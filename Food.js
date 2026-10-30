@@ -201,6 +201,36 @@ class FoodField {
         });
     }
 
+    // the closest food within `radius` of (x, y), or null. Skips `ignore` (a piece it gave up on).
+    // Only looks in the buckets the circle overlaps and allocates nothing.
+    findNearest(x, y, radius, ignore) {
+        const firstBucketX = Math.floor((x - radius) / FOOD_BUCKET_PX);
+        const lastBucketX = Math.floor((x + radius) / FOOD_BUCKET_PX);
+        const firstBucketY = Math.floor((y - radius) / FOOD_BUCKET_PX);
+        const lastBucketY = Math.floor((y + radius) / FOOD_BUCKET_PX);
+        let nearest = null;
+        let nearestDistanceSquared = radius * radius;
+
+        for (let bucketY = firstBucketY; bucketY <= lastBucketY; bucketY++) {
+            for (let bucketX = firstBucketX; bucketX <= lastBucketX; bucketX++) {
+                const bucket = this.buckets.get(bucketY * 100000 + bucketX);
+                if (!bucket) continue;
+                for (let i = 0; i < bucket.length; i++) {
+                    const food = bucket[i];
+                    if (food === ignore) continue;
+                    const dx = food.x - x;
+                    const dy = food.y - y;
+                    const distanceSquared = dx * dx + dy * dy;
+                    if (distanceSquared < nearestDistanceSquared) {
+                        nearestDistanceSquared = distanceSquared;
+                        nearest = food;
+                    }
+                }
+            }
+        }
+        return nearest;
+    }
+
     // Hoover food upgrade: food within `radius` of the head drifts towards the mouth, faster as it gets closer,
     // until the body touches it and it's eaten
     hooverTowards(headX, headY, mouthX, mouthY, radius) {
@@ -300,6 +330,7 @@ class FoodField {
                     const food = bucket[i];
                     if (!this.touchesBody(food, meeple, facingX, facingY)) continue;
                     bucket.splice(i, 1);
+                    food.eaten = true; // lets anything still tracking this piece (e.g. smell) know it's gone
                     const gained = FOOD_TYPES[food.type].calories;
                     calories += gained;
                     onEat(food.x, food.y, gained);

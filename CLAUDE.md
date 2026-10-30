@@ -19,6 +19,9 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
   - It multiplies gameplay pace: top speed, acceleration, bounce speed, the post-bounce swing rate, and calories per food. Any new pace-related value (speeds, rewards, rates of progress) should be multiplied by it too.
   - Don't scale looks, sizes, animation timing or per-frame fractions like water drag; a fraction above 1 would make things speed up by themselves.
   - Movement is split into steps of at most `COLLISION_STEP_PX` with a rock check after each (`move` in `Meeple.js`), so high speeds can't tunnel through thin walls.
+- Map hacks (`MAP_HACKS` in `GameSettings.js`, normally false): a testing mode the player asks Claude to switch on or off; there's no in-game control.
+  - It only changes starting constants: `STARTING_CALORIES` becomes 1,000,000, and `revealAfterEating(n)` returns 0, so every upgrade and the Spend Calories area show at 0 eaten.
+  - Every new "appears at N eaten" threshold must go through `revealAfterEating` so map hacks cover it.
 - `Terrain.js`: builds the cave from white noise smoothed by a cellular automaton, then adds a solid wall border. One cell is `PIXEL_RATIO` (50) px.
 - Wall shape: `squareOutline` (marching squares) is the single source of the rock shape. Both drawing (`buildWallPaths`) and collision (`findContact`) use it, so the axolotl collides with exactly the rock you see. It writes into reused typed arrays, so it doesn't allocate.
 - Drawing the world: everything is pre-rendered into 400px chunks (`renderChunk`). Chunks are built the first time they're needed and kept in a cache of up to 48, so each frame `drawView` is only a handful of `drawImage` calls.
@@ -51,8 +54,18 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
     - W, clicks and mouse movement do nothing.
     - It swims forwards at the held-W top speed and turns randomly left, right or straight for random stretches, like random A/D presses.
     - After a wall hit it stops pushing and turns away from the rock (`AUTO_RECOVER_FRAMES`) before carrying on.
+  - Improve smell: 80 calories, appears at 150 eaten. `smellRadius` is 4× Hoover's starting reach (144px) at level 1, +20% per level, shown by a dashed pink ring. It only steers during Auto swim (`Meeple.followSmell`):
+    - It targets the nearest food in the ring (`FoodField.findNearest`) and turns towards it at the normal A/D rate, never instantly.
+    - It stops pushing for tight turns, so it doesn't circle food.
+    - It re-sniffs after eating, and wanders when nothing is in range.
+    - It gives up on unreachable food after `SMELL_GIVE_UP_FRAMES`.
+    - Sniffing only happens every `SMELL_SEARCH_INTERVAL` frames while it has no target and checks only the nearby buckets. Eaten food is flagged `food.eaten` so the chase notices.
   - Buttons get a random colour, a blobby `border-radius` (8 random values), a slight tilt and a raised bottom edge every load. The price sits in a pill beside the name.
+  - Every upgrade needs a `blurb`: a very short, qualitative description with no numbers or maths (e.g. "Swim and kick faster", with no full stop at the end). It pops up beside the button on hover, clear of the other buttons and stats: on the right, or on the left when the screen is too narrow (`fitBlurb`). Write one for every new upgrade the player suggests.
   - `#speed` appears near the bottom, left-aligned in the right-hand area, after the first Swim faster. It's display only: the speed multiplier × `SPEED_DISPLAY_BASE` (10), rounded down to a whole number, so it reads 12, 14, 17, 20, 24…
+- Dev readouts (`#dev-stats`, stacked at the bottom-right of the right-hand area), refreshed twice a second by `showCalorieRate`, never every frame:
+  - `#calorie-rate`: calories eaten in the last 60 seconds, to one decimal place. Meals are kept as [time, calories] pairs in `recentMeals`.
+  - `#upgrade-time`: minutes to buy every revealed upgrade one more level at that rate (`UpgradeShop.nextLevelsTotalCost()` ÷ calories/min). It skips owned one-time upgrades and shows "–" before anything has been eaten. It shows how much the game slows down for the player.
 - `ScorePopups.js`: a "+N" in bold white Fredoka rises from each eaten piece like a bubble (pop, wobble, fade) and is drawn on the canvas over everything.
 - `BiteSounds.js`: every bite plays one underwater bubble pop, synthesized once with no sound files: a sine rising from `BUBBLE_HZ` that dies away fast.
   - The player chose this from 20 candidates; slurps, crunches and gulps were rejected.
