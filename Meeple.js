@@ -24,7 +24,7 @@ class Meeple {
             phase: 0,
             amplitude: 0,
             maxAmplitude: this.radius * 0.35,
-            speed: 0.12, // phase advanced per unit of velocity, so a faster swim means a faster wiggle
+            speed: 0.03, // phase advanced per unit of velocity, so a faster swim means a faster wiggle
         };
         this.velocity = velocity;
         this.maxVelocity = 10;

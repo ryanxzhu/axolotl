@@ -1,5 +1,6 @@
 // Dungeon drawing
-const CANVAS_PADDING = 8;
+const CANVAS_PADDING = 1;
+const CANVAS_BORDER = 2; // matches the border width in styles.css
 let CENTRE_PIXEL_X;
 let CENTRE_PIXEL_Y;
 const canvas = document.querySelector('canvas');
@@ -9,7 +10,8 @@ const c = canvas.getContext('2d');
 
 // square canvas, sized by the shorter screen side (usually height on a laptop) and pinned to the left
 function sizeCanvas() {
-    const size = Math.min(window.innerHeight, window.innerWidth) - CANVAS_PADDING * 2;
+    const size =
+        Math.min(window.innerHeight, window.innerWidth) - CANVAS_PADDING * 2 - CANVAS_BORDER * 2;
     canvas.height = size;
     canvas.width = size;
     canvas.style.left = CANVAS_PADDING + 'px';
@@ -104,8 +106,8 @@ function animate() {
 // mouse position relative to the canvas, since the canvas no longer starts at the page origin
 function updateMousePosition(e) {
     const rect = canvas.getBoundingClientRect();
-    mouse.x = e.clientX - rect.left;
-    mouse.y = e.clientY - rect.top;
+    mouse.x = e.clientX - rect.left - canvas.clientLeft;
+    mouse.y = e.clientY - rect.top - canvas.clientTop;
 }
 
 addEventListener('resize', function () {

@@ -15,5 +15,7 @@ body {
 canvas {
     position: absolute;
     margin: 0;
+    border: 2px solid black; /* keep in sync with CANVAS_BORDER in canvas.js */
+    border-radius: 5px;
     -webkit-tap-highlight-color: transparent;
 }
