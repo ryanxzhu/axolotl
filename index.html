@@ -17,6 +17,8 @@
         <script defer src="ScorePopups.js"></script>
         <script defer src="BiteSounds.js"></script>
         <script defer src="Upgrades.js"></script>
+        <script defer src="SaveGame.js"></script>
+        <script defer src="AwayProgress.js"></script>
         <script defer src="canvas.js"></script>
         <script defer src="responsive.js"></script>
         <script defer src="main.js"></script>
@@ -32,6 +34,29 @@
                 <div id="upgrades" hidden>
                     <h2>Spend Calories</h2>
                     <div id="upgrade-buttons"></div>
+                </div>
+            </div>
+            <button id="sound-toggle" aria-label="Turn sound off" aria-pressed="true"></button>
+            <div id="away-popup" hidden aria-live="polite">
+                <div class="away-title">While you were away</div>
+                <div class="away-amount"></div>
+            </div>
+            <div id="save-controls">
+                <div class="save-buttons">
+                    <button id="save-button">Save</button>
+                    <button id="load-button">Load</button>
+                    <button id="new-game-button">New game</button>
+                </div>
+                <div id="save-status"></div>
+            </div>
+            <div id="confirm-overlay" hidden>
+                <div id="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-text">
+                    <button id="confirm-close" aria-label="Close">✕</button>
+                    <p id="confirm-text">Are you sure? A new game will wipe your saved game</p>
+                    <div class="confirm-buttons">
+                        <button id="confirm-yes">Yes</button>
+                        <button id="confirm-no">No</button>
+                    </div>
                 </div>
             </div>
             <div id="speed" hidden>Speed: 1.0</div>

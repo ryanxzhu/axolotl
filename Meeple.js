@@ -9,7 +9,8 @@ const MOUTH_OPEN_FRAMES = 7; // length of one open-and-close bite
 // where the head centre and the mouth sit, in units of radius forward from the body's centre
 const HEAD_FORWARD = 0.55;
 const MOUTH_FORWARD = 0.9;
-const HOOVER_RING_COLOR = 'rgba(255, 255, 255, 0.4)';
+const HOOVER_RING_COLOR = 'rgba(255, 182, 200, 0.45)';
+const HOOVER_FILL_COLOR = 'rgba(255, 182, 200, 0.1)';
 const BASE_MAX_VELOCITY = 2.5 * GAME_SPEED; // top speed before any Swim faster upgrades
 const DEFAULT_ACCELERATION = 0.3 * GAME_SPEED;
 // slowest speed a bounce sends the axolotl away from a wall at
@@ -41,10 +42,9 @@ const SMELL_SEARCH_INTERVAL = 8; // frames between sniffs while it has nothing t
 const SMELL_GIVE_UP_FRAMES = 240; // stop chasing a piece it can't reach (e.g. behind rock) after this long
 const SMELL_SLOW_TURN_ANGLE = 0.6; // if the food is this far off to the side (radians)...
 const SMELL_SLOW_TURN_DISTANCE = 80; // ...and this close (px), stop pushing so it can turn tighter
-const SMELL_RING_COLOR = 'rgba(255, 182, 200, 0.45)';
-// made once, so drawing the dashed ring doesn't create arrays every frame
-const SMELL_RING_DASH = [6, 7];
-const NO_DASH = [];
+const SMELL_RING_COLOR = 'rgba(255, 255, 255, 0.4)';
+// how much of the body's pulse the Hoover and smell rings copy (0.5 = half as much, so up to 5% bigger)
+const RING_PULSE_STRENGTH = 0.5;
 // the body as a few circles along its length, in local units of radius: [distance forward, circle radius]
 const BODY_CIRCLES = [
     [0.55, 0.62], // head
@@ -401,8 +401,8 @@ class Meeple {
         if (target) {
             const outOfRange = Math.hypot(target.x - headX, target.y - headY) > this.smellRadius * 1.5;
             this.smellGiveUpFrames--;
-            if (target.eaten || outOfRange || this.smellGiveUpFrames <= 0) {
-                if (!target.eaten) this.smellIgnore = target;
+            if (target.gone || outOfRange || this.smellGiveUpFrames <= 0) {
+                if (!target.gone) this.smellIgnore = target;
                 target = this.smellTarget = null;
                 this.autoStretchFrames = 0; // pick a fresh wander once it stops chasing
             }
@@ -626,31 +626,34 @@ class Meeple {
 
     draw() {
         const bulgeScale = this.bulgingRadius.radius / this.radius;
+        // the Hoover and smell rings breathe in time with the body, but more gently. Drawing only: their real
+        // reach doesn't change.
+        const ringScale = 1 + (bulgeScale - 1) * RING_PULSE_STRENGTH;
 
         c.save();
         c.translate(this.adjustedX, this.adjustedY);
         // this.angle is measured from +y towards +x, so rotate the local +x axis onto the heading
         c.rotate(Math.PI / 2 - this.angle);
 
-        // the Hoover food reach: a faint ring around the head
+        // the Hoover food reach: a faint pink ring around the head, lightly shaded inside
         if (this.hooverRadius > 0) {
             c.beginPath();
-            c.arc(HEAD_FORWARD * this.radius, 0, this.hooverRadius, 0, Math.PI * 2);
+            c.arc(HEAD_FORWARD * this.radius, 0, this.hooverRadius * ringScale, 0, Math.PI * 2);
+            c.fillStyle = HOOVER_FILL_COLOR;
+            c.fill();
             c.lineWidth = 1.5;
             c.strokeStyle = HOOVER_RING_COLOR;
             c.stroke();
             c.closePath();
         }
 
-        // the Improve smell reach: a wider, faint dashed pink ring around the head
+        // the smell reach: a wider, faint white ring around the head
         if (this.smellRadius > 0) {
             c.beginPath();
-            c.arc(HEAD_FORWARD * this.radius, 0, this.smellRadius, 0, Math.PI * 2);
-            c.setLineDash(SMELL_RING_DASH);
+            c.arc(HEAD_FORWARD * this.radius, 0, this.smellRadius * ringScale, 0, Math.PI * 2);
             c.lineWidth = 1.5;
             c.strokeStyle = SMELL_RING_COLOR;
             c.stroke();
-            c.setLineDash(NO_DASH);
             c.closePath();
         }
 
@@ -675,8 +678,6 @@ class Meeple {
         this.swingAfterBounce();
         this.faceMouse();
         this.move();
-
-        this.draw();
     }
 }
 

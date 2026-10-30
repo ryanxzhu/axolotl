@@ -23,6 +23,8 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
   - It only changes starting constants: `STARTING_CALORIES` becomes 1,000,000, and `revealAfterEating(n)` returns 0, so every upgrade and the Spend Calories area show at 0 eaten.
   - Every new "appears at N eaten" threshold must go through `revealAfterEating` so map hacks cover it.
 - `Terrain.js`: builds the cave from white noise smoothed by a cellular automaton, then adds a solid wall border. One cell is `PIXEL_RATIO` (50) px.
+  - The whole map, including the water texture, comes from a seeded random generator (`seededRandom`), so `new Terrain(seed)` always rebuilds the same map. Saves store just the seed.
+  - Changing the generation (e.g. `WHITE_LEVEL`, map size, smoothing passes) makes old seeds produce different maps.
 - Wall shape: `squareOutline` (marching squares) is the single source of the rock shape. Both drawing (`buildWallPaths`) and collision (`findContact`) use it, so the axolotl collides with exactly the rock you see. It writes into reused typed arrays, so it doesn't allocate.
 - Drawing the world: everything is pre-rendered into 400px chunks (`renderChunk`). Chunks are built the first time they're needed and kept in a cache of up to 48, so each frame `drawView` is only a handful of `drawImage` calls.
   - Wall edges use marching squares through the cell centres, so the cave keeps the cell layout while the edges look like rock. Each edge's wobble comes from a hash of its position, so neighbouring chunks line up exactly.
@@ -36,33 +38,57 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
   - Bouncing (`bounce`): the path mirrors off the rock surface at full speed, which is as strong a bounce as the original game had. The axolotl then swings round to the new heading at `BOUNCE_TURN_RATE` per frame instead of snapping. It picks whichever is the smaller turn: swimming forwards along the new path or backing along it.
   - Angle 0 for the facing `angle` points down the screen (+y), and the angle grows towards +x.
   - `draw()` rotates the canvas so the head points along local +x. A single swimming wave (`swimOffset`) moves the head a little, the body more and the tail the most, all in sync; its speed follows `velocity`.
-- `Food.js`: seaweed (1 calorie) and worms (2 calories), kept at a fixed count (`SEAWEED_COUNT` 2,400, `WORM_COUNT` 800) in open water.
-  - Every seaweed and worm gets its own randomly generated sprite. Seaweed varies in its lumpy outline. Worms keep the same colours and size but vary in how they curve (arc, C or S) and the angle they lie at; each has two small eyes at its head end.
+- `Food.js`: seaweed (1 calorie) and worms (2 calories). The map starts with `SEAWEED_COUNT` and `WORM_COUNT` (2,400 each), all in open water.
+  - Shapes are generated per type up to `uniqueShapes` (every starting seaweed gets its own; worms have 20), then reused at random (`spriteFor`), so long games don't keep making new images.
+  - Seaweed varies in its lumpy outline. Worms keep the same colours and size but vary in how they curve (arc, C or S) and the angle they lie at; each has two small eyes at its head end.
   - Food sits in 400px buckets, so drawing and the eating check only look at food near the axolotl.
   - Food pulses in step with the axolotl, using the axolotl's own `bulgingRadius`.
-  - Any of the three body circles touching a piece eats it, so backing into food counts. Eaten food respawns at a random spot in the water at least `FOOD_SPAWN_CLEARANCE` px away from the axolotl.
+  - Any of the three body circles touching a piece eats it, so backing into food counts.
+  - Food count rules (`FoodField.update`, called every frame; `count` is kept as a running total):
+    - Background spawning adds 1 seaweed and 1 worm per second (`BACKGROUND_SPAWNS_PER_SECOND`), until the map holds `MAX_FOOD_MULTIPLIER` (10×) the starting total.
+    - Eaten food is replaced elsewhere only while the map holds no more than the starting total; above it, eating just lowers the count.
+    - Food perishes 2 minutes after it appears (`FOOD_LIFETIME_FRAMES`), fading out over its last second, and is replaced by the same type somewhere else.
+    - Perishing uses `perishQueue`, kept in perish order, so each frame only checks the front of the queue. The starting food gets random ages so it doesn't all perish at once.
+    - Removed food is flagged `gone`, so a smell chase notices.
+    - New food never appears within `FOOD_SPAWN_CLEARANCE` px of the axolotl.
   - Eating plays a quick open-and-close of the mouth (`MOUTH_OPEN_FRAMES` in `Meeple.js`).
 - Side panel (`#side-panel`, HTML, not canvas): spans the area right of the map with everything centred, positioned in `sizeCanvas`.
   - All page text shares one style: the Fredoka Google font (loaded in `index.html`) in white with a subtle teal edge. Only the Calories counter is pink, as the main heading. The player wants it subtle, not flashy.
   - Calories counter (`#calories`): shows `score.calories`, the spendable balance, and bounces slightly on each eat. `score.eaten` is the lifetime total. Page text only updates when something is eaten or bought, never every frame.
 - `Upgrades.js`: the "Spend Calories" area. It appears once `score.eaten` reaches `UPGRADES_REVEAL_AT` (5) and stays visible after spending.
-  - `UPGRADES` lists each upgrade with its first price (`baseCost`) and `revealAt`, the total calories eaten (`score.eaten`) before it appears. Until then it is hidden completely, and it never depends on other upgrades being bought.
+  - `UPGRADES` lists each upgrade with its first price (`baseCost`) and `revealAt`, the total calories eaten (`score.eaten`) before it appears. Until then it is hidden completely. An upgrade can instead use `revealWhen(levels)` to appear when another upgrade is owned (Improve smell does).
   - Shared rule for every upgrade: each level's effect is 20% stronger than the last (`UPGRADE_EFFECT_GROWTH`), and each level costs 1.5× the previous (`UPGRADE_COST_GROWTH`). Prices round up to whole numbers.
   - Swim faster: from 10 calories, appears at 5 eaten. Speed is 1.2^level via `Meeple.setSpeedMultiplier`, which scales top speed, acceleration and the kick together.
-  - Hoover food: from 20 calories, appears at 15 eaten. Food within `hooverRadius` of the head (36px at level 1, +20% per level) is pulled to the mouth (`FoodField.hooverTowards`, faster as it gets closer, `HOOVER_SPEED`) and eaten on touch. A faint white ring around the head shows the reach.
+  - Hoover food: from 20 calories, appears at 15 eaten. Food within `hooverRadius` of the head (36px at level 1, +20% per level) is pulled to the mouth (`FoodField.hooverTowards`, faster as it gets closer, `HOOVER_SPEED`) and eaten on touch. A faint pink ring with a very light pink fill shows the reach. The Hoover and smell rings both pulse in time with the body at half its strength (`RING_PULSE_STRENGTH`); this is visual only, and the real reach never changes.
   - Auto swim: 40 calories, appears at 50 eaten, `oneTime`. Bought once, it then becomes a free on/off switch that stays on the page: pressed in (sunk, darker, inner shadow, "on") while on, popped up ("off") while off. While on (`Meeple.setAutoSwim`/`autoPilot`):
     - W, clicks and mouse movement do nothing.
     - It swims forwards at the held-W top speed and turns randomly left, right or straight for random stretches, like random A/D presses.
     - After a wall hit it stops pushing and turns away from the rock (`AUTO_RECOVER_FRAMES`) before carrying on.
-  - Improve smell: 80 calories, appears at 150 eaten. `smellRadius` is 4× Hoover's starting reach (144px) at level 1, +20% per level, shown by a dashed pink ring. It only steers during Auto swim (`Meeple.followSmell`):
+  - Smell: buying Auto swim also gives the axolotl smell (`owned` sets `smellRadius` to `SMELL_BASE_RADIUS`, 144px, 4× Hoover's starting reach). A faint white ring shows the range. It only steers during Auto swim (`Meeple.followSmell`):
     - It targets the nearest food in the ring (`FoodField.findNearest`) and turns towards it at the normal A/D rate, never instantly.
     - It stops pushing for tight turns, so it doesn't circle food.
     - It re-sniffs after eating, and wanders when nothing is in range.
     - It gives up on unreachable food after `SMELL_GIVE_UP_FRAMES`.
-    - Sniffing only happens every `SMELL_SEARCH_INTERVAL` frames while it has no target and checks only the nearby buckets. Eaten food is flagged `food.eaten` so the chase notices.
+    - Sniffing only happens every `SMELL_SEARCH_INTERVAL` frames while it has no target and checks only the nearby buckets. Removed food is flagged `gone` so the chase notices.
+  - Improve smell: 80 calories. It appears as soon as Auto swim is owned (`revealWhen`), not by calories eaten; map hacks show it from the start. Each level adds 20% range on top of Auto swim's base (144 → 173 → 207…).
   - Buttons get a random colour, a blobby `border-radius` (8 random values), a slight tilt and a raised bottom edge every load. The price sits in a pill beside the name.
   - Every upgrade needs a `blurb`: a very short, qualitative description with no numbers or maths (e.g. "Swim and kick faster", with no full stop at the end). It pops up beside the button on hover, clear of the other buttons and stats: on the right, or on the left when the screen is too narrow (`fitBlurb`). Write one for every new upgrade the player suggests.
   - `#speed` appears near the bottom, left-aligned in the right-hand area, after the first Swim faster. It's display only: the speed multiplier × `SPEED_DISPLAY_BASE` (10), rounded down to a whole number, so it reads 12, 14, 17, 20, 24…
+- Saving (`SaveGame.js`, wired up at the bottom of `canvas.js`): Save / Load / New game buttons near the bottom of the right-hand area. Auto-save runs every 10 seconds and on `pagehide`.
+  - A save holds the map seed, calories, eaten, spent, starting calories, upgrade levels, switch states (Auto swim on/off) and the axolotl's position. Food isn't saved; it spawns fresh.
+  - Stored in localStorage, scrambled and signed with HMAC-SHA-256 (a small synchronous SHA-256 lives in `SaveGame.js`). It must also add up: starting calories + eaten - spent = calories. Anything that fails is refused and the game starts fresh with a message.
+  - This only deters tampering: the key is in the client code, so a determined developer can still forge saves or edit values in the console. Real protection needs a server.
+  - The page always starts from the save, so Load is a reload, and New game wipes the save then reloads (after a Yes / No / ✕ confirm). `leavingPage` stops the save-on-close from overwriting the save during either.
+  - Bump `SAVE_VERSION` if the save format changes.
+- Sound toggle (`#sound-toggle`): a round speaker button fixed in the top-right corner that turns the bite sound on and off (`biteSounds.enabled`). It's remembered in localStorage as a preference, not part of the game save. The Calories counter keeps `CALORIES_SIDE_CLEARANCE` clear on both sides and shrinks its text to fit (`fitCalories`) so it never runs under the button.
+- Away calories (`AwayProgress.js`, wired up at the bottom of `canvas.js`): only while Auto swim is on.
+  - When the page is hidden (window covered or minimised, or another tab shown), a small Web Worker keeps ticking `stepGame` (game logic without drawing) for `AWAY_SAMPLE_MINUTES` (3). The calories eaten then ÷ 3 is the away-rate, timestamped. Worker timers aren't throttled like the page's own.
+  - On return (`visibilitychange`), minutes since the timestamp × away-rate is paid, rounded down. Backward clock jumps are ignored and the time is capped at 7 days.
+  - Coming back within the 3 minutes pays nothing extra, since the simulation already covered it. Auto swim off: nothing runs, nothing is paid.
+  - Away calories count towards `score.eaten`. Neither they nor meals eaten during the background run count in the Calories/min readout, and the run plays no sounds or "+N" popups (`runningInBackground`).
+  - The save carries `away: { rate, since }`, so closing the tab still pays on the next load. Fallbacks: a partial sample of at least 30s if the tab closed mid-sample, else the last minute's live rate while playing with Auto swim on.
+  - A big "While you were away: +N calories" popup appears in the upper centre (`#away-popup`), only when N > 0. N is everything gained while unseen: real meals during the background run (already added as they were eaten) plus the payout. Only the payout is added on return. The save carries the unseen meals as `away.unseen`, so a reopened game shows them too.
+  - The game loop is split into `stepGame()` (logic) and drawing in `animate()`; `Meeple.update()` no longer draws itself (call `me.draw()`).
 - Dev readouts (`#dev-stats`, stacked at the bottom-right of the right-hand area), refreshed twice a second by `showCalorieRate`, never every frame:
   - `#calorie-rate`: calories eaten in the last 60 seconds, to one decimal place. Meals are kept as [time, calories] pairs in `recentMeals`.
   - `#upgrade-time`: minutes to buy every revealed upgrade one more level at that rate (`UpgradeShop.nextLevelsTotalCost()` ÷ calories/min). It skips owned one-time upgrades and shows "–" before anything has been eaten. It shows how much the game slows down for the player.

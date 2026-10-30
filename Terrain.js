@@ -33,13 +33,30 @@ const MATRIX_DIMENSIONS = {
     width: DUNGEON_WIDTH / PIXEL_RATIO,
 };
 
-function generateWhiteNoise(size, whiteLevel = 0.55) {
-    return new Array(size).fill(0).map(() => (Math.random() >= whiteLevel ? WALL : OPEN_SPACE));
+// a small seeded random number generator (mulberry32): the same seed always gives the same sequence, so a
+// map can be rebuilt exactly from its seed
+function seededRandom(seed) {
+    let state = seed | 0;
+    return () => {
+        state = (state + 0x6d2b79f5) | 0;
+        let t = Math.imul(state ^ (state >>> 15), 1 | state);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
 }
 
-function createNoiseMatrix() {
+// a fresh seed for a new map
+function newMapSeed() {
+    return crypto.getRandomValues(new Uint32Array(1))[0];
+}
+
+function generateWhiteNoise(size, whiteLevel, random) {
+    return new Array(size).fill(0).map(() => (random() >= whiteLevel ? WALL : OPEN_SPACE));
+}
+
+function createNoiseMatrix(random) {
     return new Array(MATRIX_DIMENSIONS.height).fill(0).map(() => {
-        return generateWhiteNoise(MATRIX_DIMENSIONS.width, WHITE_LEVEL);
+        return generateWhiteNoise(MATRIX_DIMENSIONS.width, WHITE_LEVEL, random);
     });
 }
 
@@ -118,7 +135,7 @@ function smoothstep(edge0, edge1, x) {
 }
 
 // seamless light-water texture with soft caustic ripples (a warped Voronoi network), made once at startup
-function generateWaterTile() {
+function generateWaterTile(random) {
     const size = WATER_TILE_PX;
     const tile = document.createElement('canvas');
     tile.width = size;
@@ -132,8 +149,8 @@ function generateWaterTile() {
     const seedsX = new Float32Array(gridCells * gridCells);
     const seedsY = new Float32Array(gridCells * gridCells);
     for (let s = 0; s < gridCells * gridCells; s++) {
-        seedsX[s] = Math.random() * cellPx;
-        seedsY[s] = Math.random() * cellPx;
+        seedsX[s] = random() * cellPx;
+        seedsY[s] = random() * cellPx;
     }
 
     const base = [200, 241, 245];
@@ -186,13 +203,17 @@ function generateWaterTile() {
 }
 
 class Terrain {
-    constructor() {
-        let noiseMatrix = createNoiseMatrix();
+    // the whole map (rock layout and water texture) comes from `seed`, so the same seed rebuilds the same map.
+    // A save stores just the seed. The wall edges' wobble is already worked out from each edge's position.
+    constructor(seed) {
+        this.seed = seed;
+        const random = seededRandom(seed);
+        let noiseMatrix = createNoiseMatrix(random);
         let terrain = convertNoiseMatrixToTerrain(noiseMatrix);
         terrain = addPadding(terrain);
         terrain = convertToPixelObjs(terrain);
         this.full = terrain;
-        this.waterTile = generateWaterTile();
+        this.waterTile = generateWaterTile(random);
         this.chunks = new Map();
         // scratch space for squareOutline, reused so collision checks don't allocate every frame
         this.outlineXs = new Float64Array(8);

@@ -1,5 +1,6 @@
 body {
     margin: 0;
+    overflow: hidden; /* the game fills the window exactly; no scrollbars */
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
 }
@@ -25,7 +26,10 @@ body {
    counter is pink, as the main heading. */
 #side-panel,
 #speed,
-#dev-stats {
+#dev-stats,
+#save-controls,
+#confirm-overlay,
+#away-popup {
     font-family: 'Fredoka', system-ui, sans-serif;
     font-weight: 700;
     letter-spacing: 1px;
@@ -43,6 +47,180 @@ body {
 
 #speed[hidden] {
     display: none;
+}
+
+/* Save / Load / New game, centred near the bottom of the right-hand area (position set in canvas.js) */
+#save-controls {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.save-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.save-buttons button,
+.confirm-buttons button {
+    padding: 7px 16px;
+    font: inherit;
+    font-size: 14px;
+    color: white;
+    background: hsl(173, 45%, 22%);
+    border: 2px solid hsl(173, 40%, 38%);
+    border-radius: 999px;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+}
+
+.save-buttons button:hover,
+.confirm-buttons button:hover {
+    filter: brightness(1.2);
+}
+
+.save-buttons button:active,
+.confirm-buttons button:active {
+    box-shadow: none;
+    transform: translateY(3px);
+}
+
+/* short messages like "Game saved"; fades out on its own */
+#save-status {
+    min-height: 18px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+#save-status.visible {
+    opacity: 0.9;
+}
+
+/* bite sound on/off, a round speaker button in the top-right corner of the page */
+#sound-toggle {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    width: 38px;
+    height: 38px;
+    padding: 7px;
+    color: white;
+    background: hsl(173, 45%, 22%);
+    border: 2px solid hsl(173, 40%, 38%);
+    border-radius: 50%;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+}
+
+#sound-toggle:hover {
+    filter: brightness(1.2);
+}
+
+#sound-toggle svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#sound-toggle.muted {
+    opacity: 0.7;
+}
+
+/* "While you were away: +N calories", big, in the upper centre of the whole screen. Animated in canvas.js. */
+#away-popup {
+    position: fixed;
+    top: 16%;
+    left: 50%;
+    transform: translate(-50%, 0);
+    padding: 22px 46px 26px;
+    text-align: center;
+    white-space: nowrap;
+    background: rgba(10, 34, 34, 0.86);
+    border: 3px solid rgba(255, 194, 210, 0.6);
+    border-radius: 28px;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    z-index: 9;
+}
+
+#away-popup[hidden] {
+    display: none;
+}
+
+#away-popup .away-title {
+    font-size: clamp(18px, 2.2vw, 28px);
+    opacity: 0.9;
+}
+
+#away-popup .away-amount {
+    margin-top: 6px;
+    font-size: clamp(38px, 5.5vw, 76px);
+    color: #ffc2d2;
+    text-shadow: 0 1.5px 0 hsl(173, 60%, 12%), 0 0 10px rgba(255, 111, 145, 0.35);
+}
+
+/* "Are you sure?" popup over the whole page */
+#confirm-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10;
+}
+
+#confirm-overlay[hidden] {
+    display: none;
+}
+
+#confirm-dialog {
+    position: relative;
+    max-width: 340px;
+    padding: 28px 28px 22px;
+    text-align: center;
+    background: hsl(173, 45%, 16%);
+    border: 3px solid hsl(173, 40%, 34%);
+    border-radius: 22px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+#confirm-text {
+    margin: 0 0 20px;
+    font-size: 18px;
+    line-height: 1.35;
+}
+
+.confirm-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+}
+
+#confirm-yes {
+    background: hsl(345, 45%, 34%);
+    border-color: hsl(345, 45%, 50%);
+}
+
+#confirm-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    padding: 2px 6px;
+    font: inherit;
+    font-size: 16px;
+    color: white;
+    background: none;
+    border: none;
+    opacity: 0.7;
+    cursor: pointer;
+}
+
+#confirm-close:hover {
+    opacity: 1;
 }
 
 /* development readouts, stacked at the bottom-right of the right-hand area */

@@ -1,6 +1,16 @@
-// how many of each food are on the map at once; eaten food respawns elsewhere, so these stay constant
+// how many of each food the map starts with. Together they're the starting total: while the map holds that many
+// or fewer, eaten food is replaced straight away; above it, eaten food isn't replaced
 const SEAWEED_COUNT = 2400;
-const WORM_COUNT = 800;
+const WORM_COUNT = 2400;
+// on top of that, this many seaweed and this many worms appear somewhere on the map every second,
+// until the map holds MAX_FOOD_MULTIPLIER times the starting total
+const BACKGROUND_SPAWNS_PER_SECOND = 1 * GAME_SPEED;
+const MAX_FOOD_MULTIPLIER = 10;
+const FRAMES_PER_SECOND = 60; // the game advances a fixed step per frame and assumes 60 frames a second
+// food perishes this long after it appears, fading out over its last second, and is replaced somewhere else
+const FOOD_LIFETIME_FRAMES = Math.round((2 * 60 * FRAMES_PER_SECOND) / GAME_SPEED);
+const PERISH_FADE_FRAMES = FRAMES_PER_SECOND;
+const PERISH_QUEUE_COMPACT_AT = 5000; // how many handled entries pile up before the queue is tidied
 const SEAWEED_CALORIES = 1 * GAME_SPEED;
 const WORM_CALORIES = 2 * GAME_SPEED;
 
@@ -137,11 +147,11 @@ function makeWormSprite() {
     return sprite;
 }
 
-// uniqueShape: every piece gets its own freshly generated sprite, so each seaweed and worm looks slightly
-// different. Otherwise one sprite is shared and each piece just lies at its own random angle.
+// each type's starting count, calories, eating radius and shape maker. uniqueShapes is how many different
+// shapes are generated for it; after that, spawns reuse those shapes at random.
 const FOOD_TYPES = {
-    seaweed: { count: SEAWEED_COUNT, calories: SEAWEED_CALORIES, radius: 9, makeSprite: makeSeaweedSprite, uniqueShape: true },
-    worm: { count: WORM_COUNT, calories: WORM_CALORIES, radius: 10, makeSprite: makeWormSprite, uniqueShape: true },
+    seaweed: { count: SEAWEED_COUNT, calories: SEAWEED_CALORIES, radius: 9, makeSprite: makeSeaweedSprite, uniqueShapes: SEAWEED_COUNT },
+    worm: { count: WORM_COUNT, calories: WORM_CALORIES, radius: 10, makeSprite: makeWormSprite, uniqueShapes: 20 },
 };
 
 class FoodField {
@@ -154,16 +164,77 @@ class FoodField {
         this.mapWidth = (terrain.full[0].length - 1) * PIXEL_RATIO;
         this.mapHeight = (terrain.full.length - 1) * PIXEL_RATIO;
 
-        this.sharedSprites = {};
-        for (const type in FOOD_TYPES) {
-            if (!FOOD_TYPES[type].uniqueShape) this.sharedSprites[type] = FOOD_TYPES[type].makeSprite();
-        }
+        this.frame = 0; // advanced by update(); perish times are counted in frames
+        this.count = 0; // pieces on the map right now
+        this.startCount = 0; // the starting total; eaten food is only replaced while at or below this
+        for (const type in FOOD_TYPES) this.startCount += FOOD_TYPES[type].count;
+        this.maxCount = this.startCount * MAX_FOOD_MULTIPLIER;
+        this.backgroundSpawnProgress = 0;
+
+        // every piece in the order it will perish. Food always lives the same length of time, so new pieces
+        // go on the end and only the front ever needs checking. perishHead is the first piece not yet handled.
+        this.perishQueue = [];
+        this.perishHead = 0;
+
+        // shapes made at the start, reused by later spawns so long games don't keep making new images
+        this.spritePools = {};
+        for (const type in FOOD_TYPES) this.spritePools[type] = [];
 
         for (const type in FOOD_TYPES) {
             for (let i = 0; i < FOOD_TYPES[type].count; i++) {
-                this.spawn(type);
+                // starting food gets a random age, so it doesn't all perish in the same frame two minutes in
+                this.spawn(type, null, Math.floor(Math.random() * FOOD_LIFETIME_FRAMES));
             }
         }
+        this.perishQueue.sort((a, b) => a.perishAt - b.perishAt);
+    }
+
+    // a fresh shape until the type has its uniqueShapes, then a random existing one
+    spriteFor(type) {
+        const pool = this.spritePools[type];
+        if (pool.length < FOOD_TYPES[type].uniqueShapes) {
+            const sprite = FOOD_TYPES[type].makeSprite();
+            pool.push(sprite);
+            return sprite;
+        }
+        return pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    // called once per frame: background spawning, and food perishing (and being replaced elsewhere)
+    update() {
+        this.frame++;
+
+        if (this.count < this.maxCount) {
+            this.backgroundSpawnProgress += BACKGROUND_SPAWNS_PER_SECOND / FRAMES_PER_SECOND;
+            while (this.backgroundSpawnProgress >= 1) {
+                this.backgroundSpawnProgress--;
+                for (const type in FOOD_TYPES) {
+                    if (this.count < this.maxCount) this.spawn(type);
+                }
+            }
+        }
+
+        const queue = this.perishQueue;
+        while (this.perishHead < queue.length && queue[this.perishHead].perishAt <= this.frame) {
+            const food = queue[this.perishHead++];
+            if (food.gone) continue; // already eaten
+            this.remove(food);
+            this.spawn(food.type, food.sprite);
+        }
+        // drop the handled front of the queue now and then, rather than shifting the array every frame
+        if (this.perishHead > PERISH_QUEUE_COMPACT_AT) {
+            queue.splice(0, this.perishHead);
+            this.perishHead = 0;
+        }
+    }
+
+    // takes a piece off the map (eaten or perished)
+    remove(food) {
+        const bucket = this.bucketFor(food.x, food.y);
+        const index = bucket.indexOf(food);
+        if (index !== -1) bucket.splice(index, 1);
+        food.gone = true; // lets anything still tracking this piece (e.g. smell) know it's gone
+        this.count--;
     }
 
     bucketFor(x, y) {
@@ -176,9 +247,11 @@ class FoodField {
         return bucket;
     }
 
-    // picks random spots until one is open water with a little room around it, away from the axolotl
-    spawn(type) {
-        const { radius, uniqueShape, makeSprite } = FOOD_TYPES[type];
+    // picks random spots until one is open water with a little room around it, away from the axolotl.
+    // sprite: reuse this shape (replacements keep the shape of what they replace); otherwise one is chosen.
+    // age: frames already lived, so the starting food perishes at staggered times.
+    spawn(type, sprite = null, age = 0) {
+        const { radius } = FOOD_TYPES[type];
         let x;
         let y;
         do {
@@ -190,15 +263,18 @@ class FoodField {
             this.terrain.findContact(x, y, radius + 3, this.contact)
         );
 
-        this.bucketFor(x, y).push({
+        const food = {
             type,
             x,
             y,
             radius,
-            sprite: uniqueShape ? makeSprite() : this.sharedSprites[type],
-            // unique shapes are already random, so only shared ones need turning to vary
-            angle: uniqueShape ? 0 : Math.random() * Math.PI * 2,
-        });
+            sprite: sprite || this.spriteFor(type),
+            perishAt: this.frame + FOOD_LIFETIME_FRAMES - age,
+            gone: false,
+        };
+        this.bucketFor(x, y).push(food);
+        this.perishQueue.push(food);
+        this.count++;
     }
 
     // the closest food within `radius` of (x, y), or null. Skips `ignore` (a piece it gave up on).
@@ -271,7 +347,8 @@ class FoodField {
         }
     }
 
-    // draws the food on screen, pulsing in step with the axolotl
+    // draws the food on screen, pulsing in step with the axolotl. In its last second a piece fades out
+    // before it perishes.
     drawView(meeple) {
         const scale = meeple.bulgingRadius.radius / meeple.radius;
         const offsetX = Math.round(meeple.adjustedX - meeple.x);
@@ -289,28 +366,25 @@ class FoodField {
                 for (let i = 0; i < bucket.length; i++) {
                     const food = bucket[i];
                     const drawSize = food.sprite.width * scale;
-                    if (food.angle === 0) {
-                        c.drawImage(
-                            food.sprite,
-                            food.x + offsetX - drawSize / 2,
-                            food.y + offsetY - drawSize / 2,
-                            drawSize,
-                            drawSize
-                        );
-                        continue;
-                    }
-                    c.save();
-                    c.translate(food.x + offsetX, food.y + offsetY);
-                    c.rotate(food.angle);
-                    c.drawImage(food.sprite, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
-                    c.restore();
+                    const framesLeft = food.perishAt - this.frame;
+                    const fading = framesLeft < PERISH_FADE_FRAMES;
+                    if (fading) c.globalAlpha = Math.max(framesLeft, 0) / PERISH_FADE_FRAMES;
+                    c.drawImage(
+                        food.sprite,
+                        food.x + offsetX - drawSize / 2,
+                        food.y + offsetY - drawSize / 2,
+                        drawSize,
+                        drawSize
+                    );
+                    if (fading) c.globalAlpha = 1;
                 }
             }
         }
     }
 
     // eats any food touching any part of the axolotl's body (head, body or tail, so backing into it counts).
-    // Each eaten piece respawns somewhere else, and onEat(x, y, calories) is called for it.
+    // onEat(x, y, calories) is called for each piece. A replacement spawns elsewhere only while the map holds
+    // no more food than it started with.
     // Returns the calories gained this frame.
     eatTouching(meeple, onEat) {
         const facingX = Math.sin(meeple.angle);
@@ -329,12 +403,15 @@ class FoodField {
                 for (let i = bucket.length - 1; i >= 0; i--) {
                     const food = bucket[i];
                     if (!this.touchesBody(food, meeple, facingX, facingY)) continue;
+                    // only replaced while the map holds no more than it started with
+                    const replace = this.count <= this.startCount;
                     bucket.splice(i, 1);
-                    food.eaten = true; // lets anything still tracking this piece (e.g. smell) know it's gone
+                    food.gone = true; // lets anything still tracking this piece (e.g. smell) know it's gone
+                    this.count--;
                     const gained = FOOD_TYPES[food.type].calories;
                     calories += gained;
                     onEat(food.x, food.y, gained);
-                    this.spawn(food.type);
+                    if (replace) this.spawn(food.type, food.sprite);
                 }
             }
         }

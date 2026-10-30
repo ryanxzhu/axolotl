@@ -25,6 +25,7 @@ class BiteSounds {
     constructor() {
         this.context = null;
         this.bubble = null;
+        this.enabled = true; // switched by the sound button in the top-right corner
     }
 
     // browsers only allow audio after the player has clicked or pressed a key, so this is called from those
@@ -42,7 +43,7 @@ class BiteSounds {
     }
 
     play() {
-        if (!this.context || this.context.state !== 'running') return;
+        if (!this.enabled || !this.context || this.context.state !== 'running') return;
         const source = this.context.createBufferSource();
         source.buffer = this.bubble;
         const gain = this.context.createGain();

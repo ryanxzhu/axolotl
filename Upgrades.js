@@ -15,8 +15,10 @@ function upgradeStrength(level) {
 
 // blurb is the short hover description: what it does, in a few words, with no numbers.
 // baseCost is the first level's price. revealAt is how many calories must have been eaten in total before the
-// button appears at all. A oneTime upgrade is bought once and then becomes an on/off switch (toggle) that
-// looks pressed in while on; buying it switches it on.
+// button appears at all; revealWhen(levels), if given, replaces that with a condition on other upgrades.
+// A oneTime upgrade is bought once and then becomes an on/off switch (toggle) that looks pressed in while on;
+// buying it switches it on. owned(meeple), if given, is a lasting effect of owning it, applied when it's bought
+// and when a saved game is loaded.
 const UPGRADES = [
     {
         id: 'swimFaster',
@@ -39,21 +41,24 @@ const UPGRADES = [
     {
         id: 'autoSwim',
         name: 'Auto swim',
-        blurb: 'Swim on its own. Click again to take back control',
+        blurb: 'Swim on its own, sniffing out nearby food. Click again to take back control',
         baseCost: 40,
         revealAt: revealAfterEating(50),
         oneTime: true,
         // while on, the axolotl swims and turns by itself and ignores W, clicks and the mouse
         toggle: (meeple, on) => meeple.setAutoSwim(on),
+        // owning it comes with a sense of smell, which steers towards nearby food while auto swimming
+        owned: (meeple) => meeple.setSmellRadius(Math.max(meeple.smellRadius, SMELL_BASE_RADIUS)),
     },
     {
         id: 'improveSmell',
         name: 'Improve smell',
-        blurb: 'While auto swimming, sniff out nearby food and head for it',
+        blurb: 'Smell food from further away',
         baseCost: 80,
-        revealAt: revealAfterEating(150),
-        // during Auto swim, steers towards the nearest food inside this ring; each level smells 20% further
-        apply: (meeple, level) => meeple.setSmellRadius(SMELL_BASE_RADIUS * upgradeStrength(level)),
+        // appears as soon as Auto swim (which brings the sense of smell) is owned; map hacks show it from the start
+        revealWhen: (levels) => MAP_HACKS || levels.autoSwim > 0,
+        // each level smells 20% further than the last, starting from Auto swim's smell range
+        apply: (meeple, level) => meeple.setSmellRadius(SMELL_BASE_RADIUS * upgradeStrength(level) * UPGRADE_EFFECT_GROWTH),
     },
 ];
 
@@ -167,7 +172,9 @@ class UpgradeShop {
         }
 
         this.score.calories -= cost;
+        this.score.spent += cost;
         this.levels[upgrade.id]++;
+        if (upgrade.owned) upgrade.owned(this.meeple);
         if (upgrade.oneTime) {
             // buying a switch turns it on straight away
             this.onSpend();
@@ -198,6 +205,23 @@ class UpgradeShop {
             total += upgradeCost(upgrade, level);
         }
         return total;
+    }
+
+    // puts back upgrade levels and switch states from a saved game, applying their effects
+    restore(levels, switchedOn) {
+        for (const upgrade of UPGRADES) {
+            const level = (levels && levels[upgrade.id]) || 0;
+            this.levels[upgrade.id] = level;
+            if (level === 0) continue;
+            if (upgrade.owned) upgrade.owned(this.meeple);
+            if (upgrade.oneTime) {
+                this.switchedOn[upgrade.id] = !!(switchedOn && switchedOn[upgrade.id]);
+                upgrade.toggle(this.meeple, this.switchedOn[upgrade.id]);
+            } else {
+                upgrade.apply(this.meeple, level);
+            }
+        }
+        this.refresh();
     }
 
     setSwitch(upgrade, on) {
@@ -236,7 +260,10 @@ class UpgradeShop {
             const cost = upgradeCost(upgrade, level);
             const button = this.buttons[upgrade.id];
             const row = this.rows[upgrade.id];
-            if (row.hidden && this.score.eaten >= upgrade.revealAt) {
+            const revealed = upgrade.revealWhen
+                ? upgrade.revealWhen(this.levels)
+                : this.score.eaten >= upgrade.revealAt;
+            if (row.hidden && revealed) {
                 row.hidden = false;
                 button.animate(
                     [
