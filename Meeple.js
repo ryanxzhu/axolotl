@@ -175,20 +175,6 @@ class Meeple {
         this.acceleration = DEFAULT_ACCELERATION;
     }
 
-    adjustFrame(terrain) {
-        terrain = terrain.map((row) => {
-            return row.map((cell) => {
-                return {
-                    x: cell.x - this.x + this.adjustedX,
-                    y: cell.y - this.y + this.adjustedY,
-                    wallType: cell.wallType,
-                };
-            });
-        });
-
-        return terrain;
-    }
-
     accelerate() {
         if (this.velocity <= this.maxVelocity) {
             this.velocity += this.acceleration;

@@ -1,6 +1,6 @@
 # Axolotl Dungeon
 
-A small browser game: a cartoon axolotl swims around a randomly generated cave, drawn on a 2D canvas. Plain JavaScript, no build step and no dependencies. The scripts in `index.html` are `defer`red and share globals, so their load order matters.
+A small browser game: a cartoon axolotl swims through a randomly generated, water-filled underground cave network, drawn on a 2D canvas. The art should feel like that: natural rock walls, with water in the open spaces. Plain JavaScript, no build step and no dependencies. The scripts in `index.html` are `defer`red and share globals, so their load order matters.
 
 ## Top priority: smooth frame rate
 
@@ -15,9 +15,13 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
 
 ## How it fits together
 
-- `Terrain.js`: builds the cave from white noise smoothed by a cellular automaton, then adds a solid wall border. One cell is `PIXEL_RATIO` (50) px. `calcPartial` returns only the cells near a point; it's used for drawing and for collision.
+- `Terrain.js`: builds the cave from white noise smoothed by a cellular automaton, then adds a solid wall border. One cell is `PIXEL_RATIO` (50) px. `calcPartial` returns only the cells near a point; it's used for collision.
+- Drawing the world: everything is pre-rendered into 400px chunks (`renderChunk`). Chunks are built the first time they're needed and kept in a cache of up to 48, so each frame `drawView` is only a handful of `drawImage` calls.
+  - Wall edges use marching squares through the cell centres, so the cave keeps the cell layout while the edges look like rock. Each edge's wobble comes from a hash of its position, so neighbouring chunks line up exactly.
+  - Water is one tileable 800px caustic texture, generated once at startup (about 80 ms).
+  - Keep new world art inside the chunk renderer, never in the per-frame path.
 - `Meeple.js`: the player axolotl. Its movement is one `velocity` (negative means reversing) plus an `angle`. Angle 0 points down the screen (+y) and the angle grows towards +x. `draw()` rotates the canvas so the head points along local +x. The tail wiggle speed follows velocity.
-- `canvas.js`: sets up the canvas, the input listeners and the `animate()` loop. The camera keeps the axolotl at the canvas centre; `adjustFrame` shifts the terrain around it.
+- `canvas.js`: sets up the canvas, the input listeners and the `animate()` loop. The camera keeps the axolotl at the canvas centre, and the terrain is drawn offset around it.
 - `responsive.js`: leftover code for an `#info` panel that's commented out, so it throws on load. `main.js` is empty.
 
 ## Layout
@@ -28,5 +32,5 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
 
 ## Known quirks
 
-- Collision checks a box around the axolotl's centre against wall cells, so the tail tip can poke slightly into walls.
+- Collision checks a box around the axolotl's centre against the square wall cells, not the smoothed rock outline. The two differ by up to about 15px at edges and corners, and the tail tip can poke slightly into walls.
 - Physics advances a fixed amount per frame and doesn't scale by elapsed time, so the game runs faster on high-refresh screens.

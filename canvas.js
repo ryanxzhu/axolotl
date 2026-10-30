@@ -90,10 +90,8 @@ function animate() {
 
     requestAnimationFrame(animate);
     c.clearRect(0, 0, canvas.width, canvas.height);
-    terrain.displayed = terrain.calcPartial(me, CENTRE_PIXEL_X, CENTRE_PIXEL_Y);
     me.collisionMap = terrain.calcPartial(me, PIXEL_RATIO + me.radius, PIXEL_RATIO + me.radius);
-    terrain.displayed = me.adjustFrame(terrain.displayed);
-    terrain.draw(terrain.displayed);
+    terrain.drawView(me);
     me.update();
 
     // drawAtMousePointer(terrain);
