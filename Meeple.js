@@ -1,7 +1,9 @@
 const MY_SIZE = 20;
 const MY_VELOCITY = 2;
 // const MY_COLOR = 'hsl(300, 100%, 50%)';
-const MY_COLOR = '#ffbda2';
+const MY_COLOR = '#ffb6c8';
+const GILL_COLOR = '#ff6f91';
+const OUTLINE_COLOR = 'hsl(340, 45%, 45%)';
 const BOUNCE_DRAG = 0.66;
 const DEFAULT_ACCELERATION = 0.3;
 
@@ -16,14 +18,14 @@ class Meeple {
             maxRadius: this.radius * 1.1,
             adjustment: 1.005,
         };
-        this.eyeDistanceFromCenterRatio = 0.5;
-        this.eyeOffsetAngle = Math.PI / 4;
-        this.eyeSizeRatio = 0.3;
-        this.eyeColor = 'white';
-        this.pupilDistanceFromCenterRatio = 0.55;
-        this.pupilOffsetAngle = Math.PI / 5;
-        this.pupilSizeRatio = 0.13;
-        this.pupilColor = 'black';
+        this.gillColor = GILL_COLOR;
+        this.outlineColor = OUTLINE_COLOR;
+        this.tail = {
+            phase: 0,
+            amplitude: 0,
+            maxAmplitude: this.radius * 0.35,
+            speed: 0.12, // phase advanced per unit of velocity, so a faster swim means a faster wiggle
+        };
         this.velocity = velocity;
         this.maxVelocity = 10;
         this.acceleration = DEFAULT_ACCELERATION;
@@ -256,61 +258,132 @@ class Meeple {
         }
     }
 
-    drawCircles(distanceFromCenterRatio, offsetAngle, sizeRatio, color) {
-        const distFromCenter = this.radius * distanceFromCenterRatio;
-        let angle = this.angle + offsetAngle;
-        angle = resetWithin2PI(angle);
+    wiggleTail() {
+        // wiggle speed follows velocity (negative when swimming backwards), and the wiggle fades out when stopped
+        this.tail.phase += this.velocity * this.tail.speed;
+        const targetAmplitude =
+            Math.min(Math.abs(this.velocity) / 3, 1) * this.tail.maxAmplitude;
+        this.tail.amplitude += (targetAmplitude - this.tail.amplitude) * 0.1;
+    }
 
-        // not actually finding X and Y velocity. Just using the same function to find the X and Y coordinates of the eyes
-        const xLocation = this.adjustedX + this.findXVelocity(angle, distFromCenter);
-        const yLocation = this.adjustedY + this.findYVelocity(angle, distFromCenter);
-
-        c.beginPath();
-        c.arc(xLocation, yLocation, this.radius * sizeRatio, 0, Math.PI * 2);
+    fillAndOutline(color) {
         c.fillStyle = color;
         c.fill();
+        c.lineWidth = 1.5;
+        c.strokeStyle = this.outlineColor;
+        c.stroke();
+    }
+
+    drawEllipse(x, y, radiusX, radiusY, rotation, color) {
+        c.beginPath();
+        c.ellipse(x, y, radiusX, radiusY, rotation, 0, Math.PI * 2);
+        this.fillAndOutline(color);
         c.closePath();
     }
 
-    drawEyes() {
-        this.drawCircles(
-            this.eyeDistanceFromCenterRatio,
-            this.eyeOffsetAngle,
-            this.eyeSizeRatio,
-            this.eyeColor
-        );
-        this.drawCircles(
-            this.eyeDistanceFromCenterRatio,
-            -this.eyeOffsetAngle,
-            this.eyeSizeRatio,
-            this.eyeColor
-        );
+    // everything below is drawn in local coordinates: origin at the meeple, head pointing along +x
+    drawTail() {
+        const r = this.radius;
+        const baseX = -0.5 * r;
+        const length = 1.2 * r;
+        const segments = 10;
+        const upperEdge = [];
+        const lowerEdge = [];
+        for (let i = 0; i <= segments; i++) {
+            const t = i / segments;
+            const x = baseX - t * length;
+            // the sideways swing grows towards the tip, and travels down the tail like a wave
+            const y = this.tail.amplitude * t * Math.sin(this.tail.phase - t * 2.5);
+            const halfWidth = 0.3 * r * (1 - t) + 0.03 * r;
+            upperEdge.push([x, y - halfWidth]);
+            lowerEdge.push([x, y + halfWidth]);
+        }
 
-        this.drawCircles(
-            this.pupilDistanceFromCenterRatio,
-            this.pupilOffsetAngle,
-            this.pupilSizeRatio,
-            this.pupilColor
-        );
+        c.beginPath();
+        c.moveTo(upperEdge[0][0], upperEdge[0][1]);
+        upperEdge.forEach(([x, y]) => c.lineTo(x, y));
+        lowerEdge.reverse().forEach(([x, y]) => c.lineTo(x, y));
+        c.closePath();
+        this.fillAndOutline(this.color);
+    }
 
-        this.drawCircles(
-            this.pupilDistanceFromCenterRatio,
-            -this.pupilOffsetAngle,
-            this.pupilSizeRatio,
-            this.pupilColor
-        );
+    drawLegs() {
+        const r = this.radius;
+        for (const side of [-1, 1]) {
+            this.drawEllipse(0.1 * r, side * 0.5 * r, 0.22 * r, 0.12 * r, side * -0.7, this.color);
+            this.drawEllipse(-0.55 * r, side * 0.42 * r, 0.22 * r, 0.12 * r, side * -0.9, this.color);
+        }
+    }
+
+    drawGills() {
+        const r = this.radius;
+        c.lineCap = 'round';
+        for (const side of [-1, 1]) {
+            // three fronds per side, fanning backwards and outwards from the side of the head
+            [2.0, 2.5, 3.0].forEach((angle) => {
+                const startX = 0.35 * r;
+                const startY = side * 0.5 * r;
+                const endX = startX + Math.cos(angle) * 0.5 * r;
+                const endY = startY + side * Math.sin(angle) * 0.5 * r;
+                c.beginPath();
+                c.moveTo(startX, startY);
+                c.lineTo(endX, endY);
+                c.lineWidth = 0.18 * r;
+                c.strokeStyle = this.gillColor;
+                c.stroke();
+                c.closePath();
+            });
+        }
+    }
+
+    drawFace() {
+        const r = this.radius;
+        for (const side of [-1, 1]) {
+            c.beginPath();
+            c.arc(0.75 * r, side * 0.38 * r, 0.11 * r, 0, Math.PI * 2);
+            c.fillStyle = 'black';
+            c.fill();
+            c.closePath();
+
+            c.beginPath();
+            c.arc(0.78 * r, side * 0.38 * r - 0.04 * r, 0.04 * r, 0, Math.PI * 2);
+            c.fillStyle = 'white';
+            c.fill();
+            c.closePath();
+        }
+
+        // little smile at the front of the head
+        c.beginPath();
+        c.arc(0.7 * r, 0, 0.28 * r, -0.7, 0.7);
+        c.lineWidth = 1.5;
+        c.strokeStyle = this.outlineColor;
+        c.stroke();
+        c.closePath();
     }
 
     draw() {
-        c.beginPath();
-        c.arc(this.adjustedX, this.adjustedY, this.bulgingRadius.radius, 0, Math.PI * 2);
-        c.fillStyle = this.color;
-        c.fill();
-        c.closePath();
+        const r = this.radius;
+        const bulgeScale = this.bulgingRadius.radius / this.radius;
+
+        c.save();
+        c.translate(this.adjustedX, this.adjustedY);
+        // this.angle is measured from +y towards +x, so rotate the local +x axis onto the heading
+        c.rotate(Math.PI / 2 - this.angle);
+        c.scale(bulgeScale, bulgeScale);
+
+        this.drawTail();
+        this.drawLegs();
+        this.drawEllipse(-0.2 * r, 0, 0.75 * r, 0.45 * r, 0, this.color);
+        this.drawGills();
+        this.drawEllipse(0.55 * r, 0, 0.55 * r, 0.65 * r, 0, this.color);
+        this.drawFace();
+
+        c.restore();
     }
 
     update() {
         this.bulging();
+        this.wiggleTail();
         this.checkForClick();
         this.checkForCollision(this.overlap);
         this.updateAngleAndVelocity();
@@ -323,7 +396,6 @@ class Meeple {
         this.y += this.yVelocity;
 
         this.draw();
-        this.drawEyes();
     }
 }
 

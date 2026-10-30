@@ -1,20 +1,27 @@
 // Dungeon drawing
-const CENTRE_PIXEL_X = window.innerWidth / 2;
-const CENTRE_PIXEL_Y = window.innerHeight / 2;
+const CANVAS_PADDING = 8;
+let CENTRE_PIXEL_X;
+let CENTRE_PIXEL_Y;
 const canvas = document.querySelector('canvas');
 const canvasContainer = document.querySelector('#canvas-container');
 const container = document.querySelector('#container');
 const c = canvas.getContext('2d');
-// canvas.height = CANVAS_HEIGHT;
-// canvas.width = CANVAS_WIDTH;
-// canvasContainer.style.height = CANVAS_HEIGHT - PIXEL_RATIO / 2 + 'px';
-// canvasContainer.style.width = CANVAS_WIDTH - PIXEL_RATIO / 2 + 'px';
-// container.style.height = CANVAS_HEIGHT - PIXEL_RATIO / 2 + 'px';
-canvas.height = window.innerHeight;
-canvas.width = window.innerWidth;
-canvasContainer.style.height = window.innerHeight + 'px';
-canvasContainer.style.width = window.innerWidth + 'px';
-container.style.height = window.innerHeight + 'px';
+
+// square canvas, sized by the shorter screen side (usually height on a laptop) and pinned to the left
+function sizeCanvas() {
+    const size = Math.min(window.innerHeight, window.innerWidth) - CANVAS_PADDING * 2;
+    canvas.height = size;
+    canvas.width = size;
+    canvas.style.left = CANVAS_PADDING + 'px';
+    canvas.style.top = CANVAS_PADDING + 'px';
+    canvasContainer.style.height = window.innerHeight + 'px';
+    canvasContainer.style.width = window.innerWidth + 'px';
+    container.style.height = window.innerHeight + 'px';
+    CENTRE_PIXEL_X = size / 2;
+    CENTRE_PIXEL_Y = size / 2;
+}
+
+sizeCanvas();
 
 const mouse = {
     x: null,
@@ -94,17 +101,24 @@ function animate() {
 
 // Excecution
 
-addEventListener('mousemove', function (e) {
-    mouse.x = e.offsetX;
-    mouse.y = e.offsetY;
+// mouse position relative to the canvas, since the canvas no longer starts at the page origin
+function updateMousePosition(e) {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+}
+
+addEventListener('resize', function () {
+    sizeCanvas();
+    init();
 });
 
-addEventListener('wheel', function (e) {
-    mouse.x = e.offsetX;
-    mouse.y = e.offsetY;
-});
+addEventListener('mousemove', updateMousePosition);
+
+addEventListener('wheel', updateMousePosition);
 
 addEventListener('mousedown', (e) => {
+    updateMousePosition(e);
     me.controller.mousedown = true;
 });
 
