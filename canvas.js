@@ -1,5 +1,5 @@
 // Dungeon drawing
-const CANVAS_PADDING = 1;
+const CANVAS_PADDING = 3;
 const CANVAS_BORDER = 2; // matches the border width in styles.css
 let CENTRE_PIXEL_X;
 let CENTRE_PIXEL_Y;
@@ -90,7 +90,6 @@ function animate() {
 
     requestAnimationFrame(animate);
     c.clearRect(0, 0, canvas.width, canvas.height);
-    me.collisionMap = terrain.calcPartial(me, PIXEL_RATIO + me.radius, PIXEL_RATIO + me.radius);
     terrain.drawView(me);
     me.update();
 

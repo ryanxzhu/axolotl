@@ -4,8 +4,17 @@ const MY_VELOCITY = 2;
 const MY_COLOR = '#ffb6c8';
 const GILL_COLOR = '#ff6f91';
 const OUTLINE_COLOR = 'hsl(340, 45%, 45%)';
-const BOUNCE_DRAG = 0.66;
 const DEFAULT_ACCELERATION = 0.3;
+// slowest speed a bounce sends the axolotl away from a wall at
+const MIN_BOUNCE_VELOCITY = 0.4;
+// how fast it swings round to its new heading after a bounce, in radians per frame
+const BOUNCE_TURN_RATE = 0.12;
+// the body as a few circles along its length, in local units of radius: [distance forward, circle radius]
+const BODY_CIRCLES = [
+    [0.55, 0.62], // head
+    [-0.2, 0.45], // body
+    [-1.1, 0.22], // tail
+];
 
 class Meeple {
     constructor(x, y, radius, velocity, color) {
@@ -31,15 +40,16 @@ class Meeple {
         this.acceleration = DEFAULT_ACCELERATION;
         this.naturalDeceleration = 0.96;
         this.color = color;
-        this.minDistanceFromWall = this.radius + PIXEL_RATIO / 2;
         this.angle = Math.random() * 2 * Math.PI;
         this.angleChange = 0.05;
         this.xVelocity = 0;
         this.yVelocity = 0;
         this.overlap = false;
+        this.bounceTargetAngle = null; // heading it's swinging round to after a bounce
         this.adjustedX = 0;
         this.adjustedY = 0;
-        this.collisionMap = [];
+        this.terrain = null;
+        this.contact = { depth: 0, normalX: 0, normalY: 0 };
         this.controller = {
             up: false,
             down: false,
@@ -111,13 +121,6 @@ class Meeple {
         }
     }
 
-    calcBounceAngle(xWall, yWall, adjustment = 0) {
-        const xDirection = xWall - this.x;
-        const yDirection = yWall - this.y;
-        const angleOfDirection = this.angleOfDirection(xDirection, yDirection) + adjustment;
-        return resetWithin2PI(angleOfDirection);
-    }
-
     changeAngle() {
         this.angle =
             Math.random() < 0.5 ? this.angle + this.angleChange : this.angle - this.angleChange;
@@ -125,54 +128,81 @@ class Meeple {
         this.angle = resetWithin2PI(this.angle);
     }
 
-    checkForCollision(overlap = false) {
-        for (let i = 0; i < this.collisionMap.length; i++) {
-            for (let j = 0; j < this.collisionMap[i].length; j++) {
-                if (this.collisionMap[i][j].wallType === OPEN_SPACE) continue;
+    // true if any part of the body overlaps rock; used when choosing a spawn point
+    touchesWall() {
+        const facingX = Math.sin(this.angle);
+        const facingY = Math.cos(this.angle);
+        for (const [forward, size] of BODY_CIRCLES) {
+            const x = this.x + facingX * forward * this.radius;
+            const y = this.y + facingY * forward * this.radius;
+            if (this.terrain.findContact(x, y, size * this.radius, this.contact)) return true;
+        }
+        return false;
+    }
 
-                const xDistanceToWall = Math.abs(this.x - this.collisionMap[i][j].x);
-                const yDistanceToWall = Math.abs(this.y - this.collisionMap[i][j].y);
-                if (
-                    xDistanceToWall < this.minDistanceFromWall &&
-                    yDistanceToWall < this.minDistanceFromWall &&
-                    overlap === false
-                ) {
-                    this.overlap = true;
-                    this.acceleration = 0;
+    // bounces off the rock like light off a mirror, keeping the full speed. Of the two ways to line up with
+    // the new path (swimming forwards along it, or backing along it), it picks the one needing the smaller
+    // turn, so glancing hits barely change its heading and head-on hits send it backing straight off.
+    // It then swings round to that heading over a few frames instead of snapping.
+    bounce(normalX, normalY) {
+        const direction = this.velocity >= 0 ? 1 : -1;
+        const movingX = Math.sin(this.angle) * direction;
+        const movingY = Math.cos(this.angle) * direction;
+        const intoWall = movingX * normalX + movingY * normalY;
+        const reflectedX = movingX - 2 * intoWall * normalX;
+        const reflectedY = movingY - 2 * intoWall * normalY;
+        const speed = Math.max(Math.abs(this.velocity), MIN_BOUNCE_VELOCITY);
 
-                    if (this.velocity >= 0) {
-                        this.angle = this.calcBounceAngle(
-                            this.collisionMap[i][j].x,
-                            this.collisionMap[i][j].y
-                        );
-                        if (this.velocity < 0.4) {
-                            this.velocity = 0.4;
-                        }
-                    } else if (this.velocity < 0) {
-                        this.angle = this.calcBounceAngle(
-                            this.collisionMap[i][j].x,
-                            this.collisionMap[i][j].y,
-                            Math.PI
-                        );
+        const facingAlongPath = Math.sin(this.angle) * reflectedX + Math.cos(this.angle) * reflectedY >= 0;
+        if (facingAlongPath) {
+            this.bounceTargetAngle = resetWithin2PI(Math.atan2(reflectedX, reflectedY));
+            this.velocity = speed;
+        } else {
+            this.bounceTargetAngle = resetWithin2PI(Math.atan2(-reflectedX, -reflectedY));
+            this.velocity = -speed;
+        }
+    }
 
-                        if (this.velocity > -0.4) {
-                            this.velocity = -0.4;
-                        }
-                    }
+    swingAfterBounce() {
+        if (this.bounceTargetAngle === null) return;
+        const remaining = wrapToPi(this.bounceTargetAngle - this.angle);
+        if (Math.abs(remaining) <= BOUNCE_TURN_RATE) {
+            this.angle = this.bounceTargetAngle;
+            this.bounceTargetAngle = null;
+            return;
+        }
+        this.angle = resetWithin2PI(this.angle + Math.sign(remaining) * BOUNCE_TURN_RATE);
+    }
 
-                    this.angle = resetWithin2PI(this.angle);
+    // pushes the body out of the rock it overlaps, bouncing off the first surface it's moving into.
+    // Like before, a bounce stops swimming and mouse steering for one frame so it can get clear.
+    resolveWallCollisions() {
+        let bounced = false;
+        for (let pass = 0; pass < 2; pass++) {
+            const facingX = Math.sin(this.angle);
+            const facingY = Math.cos(this.angle);
+            let touched = false;
+            for (const [forward, size] of BODY_CIRCLES) {
+                const x = this.x + facingX * forward * this.radius;
+                const y = this.y + facingY * forward * this.radius;
+                if (!this.terrain.findContact(x, y, size * this.radius, this.contact)) continue;
+                touched = true;
 
-                    this.velocity = -this.velocity;
+                const { depth, normalX, normalY } = this.contact;
+                this.x += normalX * depth;
+                this.y += normalY * depth;
 
-                    this.targetX = null;
-                    this.targetY = null;
-
-                    return;
+                const intoWall = (facingX * normalX + facingY * normalY) * this.velocity;
+                if (!bounced && intoWall < 0) {
+                    this.bounce(normalX, normalY);
+                    bounced = true;
                 }
             }
+            if (!touched) break;
         }
-        this.overlap = false;
-        this.acceleration = DEFAULT_ACCELERATION;
+
+        this.overlap = bounced;
+        this.acceleration = bounced ? 0 : DEFAULT_ACCELERATION;
     }
 
     accelerate() {
@@ -220,6 +250,8 @@ class Meeple {
 
     checkForClick() {
         if (this.controller.mousedown && !this.overlap) {
+            // pointing with the mouse takes over from any swing still left from a bounce
+            this.bounceTargetAngle = null;
             this.velocity = 5;
             this.angle = this.findAngleFromPoint(mouse.x, mouse.y, this.adjustedX, this.adjustedY);
         }
@@ -268,37 +300,75 @@ class Meeple {
     }
 
     // everything below is drawn in local coordinates: origin at the meeple, head pointing along +x
+
+    // one swimming wave runs from head to tail: barely moving at the head, swinging most at the tail tip
+    swimOffset(x) {
+        const r = this.radius;
+        const alongBody = (0.9 * r - x) / (2.6 * r); // 0 near the snout, 1 at the tail tip
+        const strength = 0.15 + 0.85 * alongBody * alongBody;
+        return this.tail.amplitude * strength * Math.sin(this.tail.phase - alongBody * 4);
+    }
+
+    // how much a part at x is turned by the wave, from the wave's slope there
+    swimTilt(x) {
+        return Math.atan((this.swimOffset(x + 1) - this.swimOffset(x - 1)) / 2);
+    }
+
     drawTail() {
         const r = this.radius;
         const baseX = -0.5 * r;
         const length = 1.2 * r;
         const segments = 10;
-        const upperEdge = [];
-        const lowerEdge = [];
+
+        c.beginPath();
+        // up one edge from base to tip, then back down the other edge
         for (let i = 0; i <= segments; i++) {
             const t = i / segments;
             const x = baseX - t * length;
-            // the sideways swing grows towards the tip, and travels down the tail like a wave
-            const y = this.tail.amplitude * t * Math.sin(this.tail.phase - t * 2.5);
             const halfWidth = 0.3 * r * (1 - t) + 0.03 * r;
-            upperEdge.push([x, y - halfWidth]);
-            lowerEdge.push([x, y + halfWidth]);
+            c.lineTo(x, this.swimOffset(x) - halfWidth);
         }
-
-        c.beginPath();
-        c.moveTo(upperEdge[0][0], upperEdge[0][1]);
-        upperEdge.forEach(([x, y]) => c.lineTo(x, y));
-        lowerEdge.reverse().forEach(([x, y]) => c.lineTo(x, y));
+        for (let i = segments; i >= 0; i--) {
+            const t = i / segments;
+            const x = baseX - t * length;
+            const halfWidth = 0.3 * r * (1 - t) + 0.03 * r;
+            c.lineTo(x, this.swimOffset(x) + halfWidth);
+        }
         c.closePath();
         this.fillAndOutline(this.color);
     }
 
     drawLegs() {
         const r = this.radius;
+        const frontX = 0.1 * r;
+        const backX = -0.55 * r;
+        const frontOffset = this.swimOffset(frontX);
+        const backOffset = this.swimOffset(backX);
+        const frontTilt = this.swimTilt(frontX);
+        const backTilt = this.swimTilt(backX);
         for (const side of [-1, 1]) {
-            this.drawEllipse(0.1 * r, side * 0.5 * r, 0.22 * r, 0.12 * r, side * -0.7, this.color);
-            this.drawEllipse(-0.55 * r, side * 0.42 * r, 0.22 * r, 0.12 * r, side * -0.9, this.color);
+            this.drawEllipse(frontX, side * 0.5 * r + frontOffset, 0.22 * r, 0.12 * r, side * -0.7 + frontTilt, this.color);
+            this.drawEllipse(backX, side * 0.42 * r + backOffset, 0.22 * r, 0.12 * r, side * -0.9 + backTilt, this.color);
         }
+    }
+
+    drawBody() {
+        const x = -0.2 * this.radius;
+        this.drawEllipse(x, this.swimOffset(x), 0.75 * this.radius, 0.45 * this.radius, this.swimTilt(x), this.color);
+    }
+
+    // head, gills and face move together as one piece, following the wave at the head
+    drawHead() {
+        const r = this.radius;
+        const headX = 0.55 * r;
+        c.save();
+        c.translate(headX, this.swimOffset(headX));
+        c.rotate(this.swimTilt(headX));
+        c.translate(-headX, 0);
+        this.drawGills();
+        this.drawEllipse(headX, 0, 0.55 * r, 0.65 * r, 0, this.color);
+        this.drawFace();
+        c.restore();
     }
 
     drawGills() {
@@ -348,7 +418,6 @@ class Meeple {
     }
 
     draw() {
-        const r = this.radius;
         const bulgeScale = this.bulgingRadius.radius / this.radius;
 
         c.save();
@@ -359,10 +428,8 @@ class Meeple {
 
         this.drawTail();
         this.drawLegs();
-        this.drawEllipse(-0.2 * r, 0, 0.75 * r, 0.45 * r, 0, this.color);
-        this.drawGills();
-        this.drawEllipse(0.55 * r, 0, 0.55 * r, 0.65 * r, 0, this.color);
-        this.drawFace();
+        this.drawBody();
+        this.drawHead();
 
         c.restore();
     }
@@ -371,15 +438,16 @@ class Meeple {
         this.bulging();
         this.wiggleTail();
         this.checkForClick();
-        this.checkForCollision(this.overlap);
         this.updateAngleAndVelocity();
         // this.changeAngle();
         this.naturallyDecelerate();
+        this.swingAfterBounce();
 
         this.xVelocity = this.findXVelocity();
         this.yVelocity = this.findYVelocity();
         this.x += this.xVelocity;
         this.y += this.yVelocity;
+        this.resolveWallCollisions();
 
         this.draw();
     }
@@ -391,8 +459,10 @@ function generateMeeple(terrain, startX, startY) {
         const x = startX + Math.random() * 500;
         const y = startY + Math.random() * 500;
         me = new Meeple(x, y, MY_SIZE, MY_VELOCITY, MY_COLOR);
-        me.collisionMap = terrain.calcPartial(me, PIXEL_RATIO + me.radius, PIXEL_RATIO + me.radius);
-        me.checkForCollision();
-    } while (me.overlap === true);
+        me.terrain = terrain;
+    } while (
+        terrain.isWall(Math.round(me.y / PIXEL_RATIO), Math.round(me.x / PIXEL_RATIO)) ||
+        me.touchesWall()
+    );
     return me;
 }

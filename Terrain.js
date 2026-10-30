@@ -194,6 +194,11 @@ class Terrain {
         this.full = terrain;
         this.waterTile = generateWaterTile();
         this.chunks = new Map();
+        // scratch space for squareOutline, reused so collision checks don't allocate every frame
+        this.outlineXs = new Float64Array(8);
+        this.outlineYs = new Float64Array(8);
+        this.outlineCrossings = new Uint8Array(8);
+        this.outlinePointCount = 0;
     }
 
     isWall(row, col) {
@@ -208,71 +213,136 @@ class Terrain {
         return 0.5 + (hash2(row * 2 + (vertical ? 1 : 0), col) - 0.5) * EDGE_JITTER * 2;
     }
 
-    // marching squares over the cell centres: walls become one filled shape with irregular rocky edges
+    addOutlinePoint(x, y, crossing) {
+        const p = this.outlinePointCount++;
+        this.outlineXs[p] = x;
+        this.outlineYs[p] = y;
+        this.outlineCrossings[p] = crossing;
+    }
+
+    // marching squares over the cell centres, shared by drawing and collision so both see the same rock.
+    // Fills outlineXs/outlineYs with the wall part of one square (world px), walking its corners clockwise
+    // and adding the points where a wall edge crosses the square's sides. Returns the number of points:
+    // 0 for open water, 4 corners and no crossings for solid rock.
+    squareOutline(row, col) {
+        const topLeft = this.isWall(row, col);
+        const topRight = this.isWall(row, col + 1);
+        const bottomRight = this.isWall(row + 1, col + 1);
+        const bottomLeft = this.isWall(row + 1, col);
+        const left = col * PIXEL_RATIO;
+        const top = row * PIXEL_RATIO;
+
+        this.outlinePointCount = 0;
+        if (topLeft) this.addOutlinePoint(left, top, false);
+        if (topLeft !== topRight) {
+            this.addOutlinePoint(left + this.edgeCrossing(row, col, false) * PIXEL_RATIO, top, true);
+        }
+        if (topRight) this.addOutlinePoint(left + PIXEL_RATIO, top, false);
+        if (topRight !== bottomRight) {
+            this.addOutlinePoint(left + PIXEL_RATIO, top + this.edgeCrossing(row, col + 1, true) * PIXEL_RATIO, true);
+        }
+        if (bottomRight) this.addOutlinePoint(left + PIXEL_RATIO, top + PIXEL_RATIO, false);
+        if (bottomRight !== bottomLeft) {
+            this.addOutlinePoint(left + this.edgeCrossing(row + 1, col, false) * PIXEL_RATIO, top + PIXEL_RATIO, true);
+        }
+        if (bottomLeft) this.addOutlinePoint(left, top + PIXEL_RATIO, false);
+        if (bottomLeft !== topLeft) {
+            this.addOutlinePoint(left, top + this.edgeCrossing(row, col, true) * PIXEL_RATIO, true);
+        }
+        return this.outlinePointCount;
+    }
+
     buildWallPaths(firstRow, firstCol, rows, cols, originX, originY) {
         const fill = new Path2D();
         const outline = new Path2D();
-        const xs = [];
-        const ys = [];
-        const isCrossing = [];
+        const xs = this.outlineXs;
+        const ys = this.outlineYs;
 
         for (let row = firstRow; row < firstRow + rows; row++) {
             for (let col = firstCol; col < firstCol + cols; col++) {
-                const topLeft = this.isWall(row, col);
-                const topRight = this.isWall(row, col + 1);
-                const bottomRight = this.isWall(row + 1, col + 1);
-                const bottomLeft = this.isWall(row + 1, col);
-                if (!topLeft && !topRight && !bottomRight && !bottomLeft) continue;
+                const count = this.squareOutline(row, col);
+                if (count === 0) continue;
 
-                const left = col * PIXEL_RATIO - originX;
-                const top = row * PIXEL_RATIO - originY;
-                if (topLeft && topRight && bottomRight && bottomLeft) {
-                    fill.rect(left, top, PIXEL_RATIO, PIXEL_RATIO);
-                    continue;
-                }
-
-                // walk the square's corners clockwise, adding wall corners and the points where edges are crossed
-                xs.length = 0;
-                ys.length = 0;
-                isCrossing.length = 0;
-                const addPoint = (x, y, crossing) => {
-                    xs.push(x);
-                    ys.push(y);
-                    isCrossing.push(crossing);
-                };
-                if (topLeft) addPoint(left, top, false);
-                if (topLeft !== topRight) {
-                    addPoint(left + this.edgeCrossing(row, col, false) * PIXEL_RATIO, top, true);
-                }
-                if (topRight) addPoint(left + PIXEL_RATIO, top, false);
-                if (topRight !== bottomRight) {
-                    addPoint(left + PIXEL_RATIO, top + this.edgeCrossing(row, col + 1, true) * PIXEL_RATIO, true);
-                }
-                if (bottomRight) addPoint(left + PIXEL_RATIO, top + PIXEL_RATIO, false);
-                if (bottomRight !== bottomLeft) {
-                    addPoint(left + this.edgeCrossing(row + 1, col, false) * PIXEL_RATIO, top + PIXEL_RATIO, true);
-                }
-                if (bottomLeft) addPoint(left, top + PIXEL_RATIO, false);
-                if (bottomLeft !== topLeft) {
-                    addPoint(left, top + this.edgeCrossing(row, col, true) * PIXEL_RATIO, true);
-                }
-
-                fill.moveTo(xs[0], ys[0]);
-                for (let p = 1; p < xs.length; p++) fill.lineTo(xs[p], ys[p]);
+                fill.moveTo(xs[0] - originX, ys[0] - originY);
+                for (let p = 1; p < count; p++) fill.lineTo(xs[p] - originX, ys[p] - originY);
                 fill.closePath();
 
                 // two crossings next to each other in the walk are a piece of the wall's surface
-                for (let p = 0; p < xs.length; p++) {
-                    const next = (p + 1) % xs.length;
-                    if (isCrossing[p] && isCrossing[next]) {
-                        outline.moveTo(xs[p], ys[p]);
-                        outline.lineTo(xs[next], ys[next]);
+                for (let p = 0; p < count; p++) {
+                    const next = (p + 1) % count;
+                    if (this.outlineCrossings[p] && this.outlineCrossings[next]) {
+                        outline.moveTo(xs[p] - originX, ys[p] - originY);
+                        outline.lineTo(xs[next] - originX, ys[next] - originY);
                     }
                 }
             }
         }
 
         return { fill, outline };
+    }
+
+    // finds where a circle overlaps the rock surface, keeping the deepest overlap in `contact`
+    // (normal pointing out into the water). Returns false when the circle is clear.
+    findContact(x, y, radius, contact) {
+        contact.depth = 0;
+        const firstRow = Math.floor((y - radius) / PIXEL_RATIO);
+        const lastRow = Math.floor((y + radius) / PIXEL_RATIO);
+        const firstCol = Math.floor((x - radius) / PIXEL_RATIO);
+        const lastCol = Math.floor((x + radius) / PIXEL_RATIO);
+        const xs = this.outlineXs;
+        const ys = this.outlineYs;
+
+        for (let row = firstRow; row <= lastRow; row++) {
+            for (let col = firstCol; col <= lastCol; col++) {
+                const count = this.squareOutline(row, col);
+                for (let p = 0; p < count; p++) {
+                    const next = (p + 1) % count;
+                    if (!this.outlineCrossings[p] || !this.outlineCrossings[next]) continue;
+
+                    const ax = xs[p];
+                    const ay = ys[p];
+                    const dx = xs[next] - ax;
+                    const dy = ys[next] - ay;
+                    const length = Math.hypot(dx, dy);
+                    if (length === 0) continue;
+                    // the walk is clockwise round the rock, so the water is on the left of each surface piece
+                    const waterNormalX = dy / length;
+                    const waterNormalY = -dx / length;
+
+                    const t = Math.min(Math.max(((x - ax) * dx + (y - ay) * dy) / (length * length), 0), 1);
+                    const offsetX = x - (ax + t * dx);
+                    const offsetY = y - (ay + t * dy);
+                    const distance = Math.hypot(offsetX, offsetY);
+                    if (distance >= radius) continue;
+
+                    const behindSurface = offsetX * waterNormalX + offsetY * waterNormalY < 0;
+                    let depth;
+                    let normalX;
+                    let normalY;
+                    if (behindSurface && t > 0 && t < 1) {
+                        // centre has slipped just inside the rock: push straight back out through this surface
+                        depth = radius + distance;
+                        normalX = waterNormalX;
+                        normalY = waterNormalY;
+                    } else if (distance > 0) {
+                        depth = radius - distance;
+                        normalX = offsetX / distance;
+                        normalY = offsetY / distance;
+                    } else {
+                        depth = radius;
+                        normalX = waterNormalX;
+                        normalY = waterNormalY;
+                    }
+
+                    if (depth > contact.depth) {
+                        contact.depth = depth;
+                        contact.normalX = normalX;
+                        contact.normalY = normalY;
+                    }
+                }
+            }
+        }
+        return contact.depth > 0;
     }
 
     renderChunk(chunkX, chunkY) {

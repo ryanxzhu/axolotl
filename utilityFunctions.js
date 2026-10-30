@@ -5,6 +5,11 @@ function resetWithin2PI(angle) {
     return angle;
 }
 
+// shortest signed turn, in -PI..PI
+function wrapToPi(angle) {
+    return angle - Math.PI * 2 * Math.floor((angle + Math.PI) / (Math.PI * 2));
+}
+
 function binarySearch(row, target, offset = 0) {
     let left = 0;
     let right = row.length - 1;

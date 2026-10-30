@@ -15,13 +15,19 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
 
 ## How it fits together
 
-- `Terrain.js`: builds the cave from white noise smoothed by a cellular automaton, then adds a solid wall border. One cell is `PIXEL_RATIO` (50) px. `calcPartial` returns only the cells near a point; it's used for collision.
+- `Terrain.js`: builds the cave from white noise smoothed by a cellular automaton, then adds a solid wall border. One cell is `PIXEL_RATIO` (50) px.
+- Wall shape: `squareOutline` (marching squares) is the single source of the rock shape. Both drawing (`buildWallPaths`) and collision (`findContact`) use it, so the axolotl collides with exactly the rock you see. It writes into reused typed arrays, so it doesn't allocate.
 - Drawing the world: everything is pre-rendered into 400px chunks (`renderChunk`). Chunks are built the first time they're needed and kept in a cache of up to 48, so each frame `drawView` is only a handful of `drawImage` calls.
   - Wall edges use marching squares through the cell centres, so the cave keeps the cell layout while the edges look like rock. Each edge's wobble comes from a hash of its position, so neighbouring chunks line up exactly.
   - Water is one tileable 800px caustic texture, generated once at startup (about 80 ms).
   - Keep new world art inside the chunk renderer, never in the per-frame path.
-- `Meeple.js`: the player axolotl. Its movement is one `velocity` (negative means reversing) plus an `angle`. Angle 0 points down the screen (+y) and the angle grows towards +x. `draw()` rotates the canvas so the head points along local +x. The tail wiggle speed follows velocity.
-- `canvas.js`: sets up the canvas, the input listeners and the `animate()` loop. The camera keeps the axolotl at the canvas centre, and the terrain is drawn offset around it.
+- `Meeple.js`: the player axolotl.
+  - Movement is one signed `velocity` along the facing `angle` (negative means reversing). The player likes this steering, so don't swap it for a momentum model; one was tried and rejected.
+  - Collision treats the body as three circles (head, body, tail, in `BODY_CIRCLES`) and pushes them out of the rock.
+  - Bouncing (`bounce`): the path mirrors off the rock surface at full speed, which is as strong a bounce as the original game had. The axolotl then swings round to the new heading at `BOUNCE_TURN_RATE` per frame instead of snapping. It picks whichever is the smaller turn: swimming forwards along the new path or backing along it.
+  - Angle 0 for the facing `angle` points down the screen (+y), and the angle grows towards +x.
+  - `draw()` rotates the canvas so the head points along local +x. A single swimming wave (`swimOffset`) moves the head a little, the body more and the tail the most, all in sync; its speed follows `velocity`.
+- `canvas.js`: sets up the canvas, the input listeners and the `animate()` loop. The camera keeps the axolotl at the canvas centre, and the terrain is drawn offset around it. The map is always north-up and never rotates: a rotating camera was tried and made the player feel sick, so don't bring it back.
 - `responsive.js`: leftover code for an `#info` panel that's commented out, so it throws on load. `main.js` is empty.
 
 ## Layout
@@ -32,5 +38,5 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
 
 ## Known quirks
 
-- Collision checks a box around the axolotl's centre against the square wall cells, not the smoothed rock outline. The two differ by up to about 15px at edges and corners, and the tail tip can poke slightly into walls.
+- The collision circles don't bend with the swimming wave, so the tail tip can brush slightly into rock while it wiggles.
 - Physics advances a fixed amount per frame and doesn't scale by elapsed time, so the game runs faster on high-refresh screens.
