@@ -211,6 +211,10 @@ function animate() {
     terrain.drawView(me);
     food.drawView(me);
     me.draw();
+    fog.draw(me);
+    // bubbles go over the walls, food, axolotl and fog; only the "+N" numbers sit above them
+    bubbles.update(me);
+    bubbles.draw(me);
     scorePopups.draw(me);
 }
 
@@ -323,6 +327,8 @@ me.food = food; // so Improve smell can find nearby food
 console.timeEnd('food generation');
 
 const scorePopups = new ScorePopups();
+const bubbles = new Bubbles();
+const fog = new FogOfWar();
 const upgradeShop = new UpgradeShop(score, me, showCalories);
 if (saved) upgradeShop.restore(saved.levels, saved.switchedOn);
 showCalories(); // the page's HTML says "Calories: 0", which is wrong for a saved game or map hacks

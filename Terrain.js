@@ -129,6 +129,21 @@ function hash2(a, b) {
     return (h >>> 0) / 4294967296;
 }
 
+// true if line segment A (a1 to a2) crosses or touches line segment B (b1 to b2)
+function segmentsCross(a1x, a1y, a2x, a2y, b1x, b1y, b2x, b2y) {
+    const ax = a2x - a1x;
+    const ay = a2y - a1y;
+    const bx = b2x - b1x;
+    const by = b2y - b1y;
+    const denominator = ax * by - ay * bx;
+    if (denominator === 0) return false; // parallel
+    const startX = b1x - a1x;
+    const startY = b1y - a1y;
+    const alongA = (startX * by - startY * bx) / denominator;
+    const alongB = (startX * ay - startY * ax) / denominator;
+    return alongA >= 0 && alongA <= 1 && alongB >= 0 && alongB <= 1;
+}
+
 function smoothstep(edge0, edge1, x) {
     const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
     return t * t * (3 - 2 * t);
@@ -300,6 +315,30 @@ class Terrain {
         }
 
         return { fill, outline };
+    }
+
+    // true if nothing but water lies on the straight line between two points (both in water). Exact: it checks
+    // whether the line crosses any piece of the drawn rock's surface in the squares around it, so even a line
+    // that only clips a rock corner counts as blocked. Allocates nothing.
+    hasLineOfSight(fromX, fromY, toX, toY) {
+        const firstRow = Math.floor(Math.min(fromY, toY) / PIXEL_RATIO);
+        const lastRow = Math.floor(Math.max(fromY, toY) / PIXEL_RATIO);
+        const firstCol = Math.floor(Math.min(fromX, toX) / PIXEL_RATIO);
+        const lastCol = Math.floor(Math.max(fromX, toX) / PIXEL_RATIO);
+        const xs = this.outlineXs;
+        const ys = this.outlineYs;
+
+        for (let row = firstRow; row <= lastRow; row++) {
+            for (let col = firstCol; col <= lastCol; col++) {
+                const count = this.squareOutline(row, col);
+                for (let p = 0; p < count; p++) {
+                    const next = (p + 1) % count;
+                    if (!this.outlineCrossings[p] || !this.outlineCrossings[next]) continue;
+                    if (segmentsCross(fromX, fromY, toX, toY, xs[p], ys[p], xs[next], ys[next])) return false;
+                }
+            }
+        }
+        return true;
     }
 
     // true if the point is inside the drawn rock (point-in-polygon on that square's wall shape)

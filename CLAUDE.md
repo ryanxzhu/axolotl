@@ -2,6 +2,10 @@
 
 A small browser game: a cartoon axolotl swims through a randomly generated, water-filled underground cave network, drawn on a 2D canvas. The art should feel like that: natural rock walls, with water in the open spaces. Plain JavaScript, no build step and no dependencies. The scripts in `index.html` are `defer`red and share globals, so their load order matters.
 
+## Shared global names
+
+All the scripts are plain `<script defer>` files that share one global scope. A `const`, `let`, `class` or `function` name declared in two files makes the second file fail to load entirely, which can leave the canvas blank. Give new top-level names a prefix that matches their file (e.g. `BUBBLE_` in `Bubbles.js`, `POP_SOUND_` in `BiteSounds.js`). After adding a file, load the page and check the console for "has already been declared".
+
 ## Top priority: smooth frame rate
 
 - **All code has to run very efficiently. No frames may be skipped during play.**
@@ -59,13 +63,15 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
   - `UPGRADES` lists each upgrade with its first price (`baseCost`) and `revealAt`, the total calories eaten (`score.eaten`) before it appears. Until then it is hidden completely. An upgrade can instead use `revealWhen(levels)` to appear when another upgrade is owned (Improve smell does).
   - Shared rule for every upgrade: each level's effect is 20% stronger than the last (`UPGRADE_EFFECT_GROWTH`), and each level costs 1.5× the previous (`UPGRADE_COST_GROWTH`). Prices round up to whole numbers.
   - Swim faster: from 10 calories, appears at 5 eaten. Speed is 1.2^level via `Meeple.setSpeedMultiplier`, which scales top speed, acceleration and the kick together.
-  - Hoover food: from 20 calories, appears at 15 eaten. Food within `hooverRadius` of the head (36px at level 1, +20% per level) is pulled to the mouth (`FoodField.hooverTowards`, faster as it gets closer, `HOOVER_SPEED`) and eaten on touch. A faint pink ring with a very light pink fill shows the reach. The Hoover and smell rings both pulse in time with the body at half its strength (`RING_PULSE_STRENGTH`); this is visual only, and the real reach never changes.
+  - Hoover food: from 20 calories, appears at 15 eaten. Food within `hooverRadius` of the head (36px at level 1, +20% per level) is pulled to the mouth (`FoodField.hooverTowards`, faster as it gets closer, `HOOVER_SPEED`) and eaten on touch. A faint pink ring with a very light pink fill shows the reach. The Hoover ring pulses in time with the body at half its strength (`RING_PULSE_STRENGTH`); this is visual only, and the real reach never changes.
   - Auto swim: 40 calories, appears at 50 eaten, `oneTime`. Bought once, it then becomes a free on/off switch that stays on the page: pressed in (sunk, darker, inner shadow, "on") while on, popped up ("off") while off. While on (`Meeple.setAutoSwim`/`autoPilot`):
     - W, clicks and mouse movement do nothing.
     - It swims forwards at the held-W top speed and turns randomly left, right or straight for random stretches, like random A/D presses.
     - After a wall hit it stops pushing and turns away from the rock (`AUTO_RECOVER_FRAMES`) before carrying on.
-  - Smell: buying Auto swim also gives the axolotl smell (`owned` sets `smellRadius` to `SMELL_BASE_RADIUS`, 144px, 4× Hoover's starting reach). A faint white ring shows the range. It only steers during Auto swim (`Meeple.followSmell`):
-    - It targets the nearest food in the ring (`FoodField.findNearest`) and turns towards it at the normal A/D rate, never instantly.
+  - Smell: buying Auto swim also gives the axolotl smell (`owned` sets `smellRadius` to `SMELL_BASE_RADIUS`, 144px, 4× Hoover's starting reach). The edge of the fog of war shows the range (no ring is drawn). It only steers during Auto swim (`Meeple.followSmell`):
+    - It targets the nearest food in the ring that it can see (`FoodField.findNearest`) and turns towards it at the normal A/D rate, never instantly.
+    - Food behind rock is ignored, strictly: `Terrain.hasLineOfSight` tests whether the line from head to food crosses any piece of the drawn rock outline, which is exact even for corners. While chasing it re-checks every `SMELL_SEARCH_INTERVAL` frames and drops a target a wall has come in front of.
+    - The player chose strict over "prefer visible, fall back to hidden food", even though testing found the fallback ate about 10% more.
     - It stops pushing for tight turns, so it doesn't circle food.
     - It re-sniffs after eating, and wanders when nothing is in range.
     - It gives up on unreachable food after `SMELL_GIVE_UP_FRAMES`.
@@ -92,8 +98,16 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
 - Dev readouts (`#dev-stats`, stacked at the bottom-right of the right-hand area), refreshed twice a second by `showCalorieRate`, never every frame:
   - `#calorie-rate`: calories eaten in the last 60 seconds, to one decimal place. Meals are kept as [time, calories] pairs in `recentMeals`.
   - `#upgrade-time`: minutes to buy every revealed upgrade one more level at that rate (`UpgradeShop.nextLevelsTotalCost()` ÷ calories/min). It skips owned one-time upgrades and shows "–" before anything has been eaten. It shows how much the game slows down for the player.
+- `Bubbles.js`: bubbles rise from the mouth at an average rate proportional to speed (`BUBBLES_PER_SECOND_AT_TOP_SPEED`, none when still). Releases are irregular: random gaps (`randomReleaseGap`) and clusters of 1–3 (`BUBBLE_CLUSTER_CHANCES`), with the release rate adjusted so the average holds.
+  - They stay where they were released in the cave, rising and wobbling, and fade out over 2–2.5s.
+  - They're white with a teal-blue outline and a glint, fully visible until they fade, and drawn over the walls, food and axolotl, under only the "+N" numbers.
+  - They live in fixed typed arrays (max `BUBBLE_CAPACITY`), so nothing is allocated per frame. They only update while visible, never in the background away-run.
+- `Fog.js`: fog of war, a semi-transparent darkness (`FOG_COLOR`) over the walls, food and axolotl, with bubbles and "+N" numbers drawn on top.
+  - Full light around the head fades out from `FOG_FADE_START` (75%) of the radius to full darkness at the radius.
+  - The radius is the smell radius, and from the start of the game it's at least `SMELL_BASE_RADIUS`, before smell is owned.
+  - The darkness is pre-drawn into one image and only rebuilt when the radius or canvas size changes; each frame is a single drawImage.
 - `ScorePopups.js`: a "+N" in bold white Fredoka rises from each eaten piece like a bubble (pop, wobble, fade) and is drawn on the canvas over everything.
-- `BiteSounds.js`: every bite plays one underwater bubble pop, synthesized once with no sound files: a sine rising from `BUBBLE_HZ` that dies away fast.
+- `BiteSounds.js`: every bite plays one underwater bubble pop, synthesized once with no sound files: a sine rising from `POP_SOUND_HZ` that dies away fast.
   - The player chose this from 20 candidates; slurps, crunches and gulps were rejected.
   - Keep it a single sound: per-food and randomised variations were also rejected. Browsers only allow audio after a click or key press, so `unlock()` runs on the first mousedown/keydown.
 - `canvas.js`: sets up the canvas, the input listeners and the `animate()` loop. The camera keeps the axolotl at the canvas centre, and the terrain is drawn offset around it. The map is always north-up and never rotates: a rotating camera was tried and made the player feel sick, so don't bring it back.

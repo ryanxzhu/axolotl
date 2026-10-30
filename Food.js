@@ -277,8 +277,9 @@ class FoodField {
         this.count++;
     }
 
-    // the closest food within `radius` of (x, y), or null. Skips `ignore` (a piece it gave up on).
-    // Only looks in the buckets the circle overlaps and allocates nothing.
+    // the closest food within `radius` of (x, y) with no rock in between, or null. Skips `ignore` (a piece it
+    // gave up on). Only looks in the buckets the circle overlaps and allocates nothing. The line-of-sight check
+    // only runs for a piece that would beat the closest found so far, so it runs just a few times per search.
     findNearest(x, y, radius, ignore) {
         const firstBucketX = Math.floor((x - radius) / FOOD_BUCKET_PX);
         const lastBucketX = Math.floor((x + radius) / FOOD_BUCKET_PX);
@@ -297,7 +298,7 @@ class FoodField {
                     const dx = food.x - x;
                     const dy = food.y - y;
                     const distanceSquared = dx * dx + dy * dy;
-                    if (distanceSquared < nearestDistanceSquared) {
+                    if (distanceSquared < nearestDistanceSquared && this.terrain.hasLineOfSight(x, y, food.x, food.y)) {
                         nearestDistanceSquared = distanceSquared;
                         nearest = food;
                     }
