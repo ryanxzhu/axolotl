@@ -8,7 +8,8 @@
 // developer who reads this code can still forge a save or edit values while playing. Only a server can fully
 // stop that. This stops anyone short of reverse-engineering the game.
 
-const SAVE_STORAGE_KEY = 'axolotl-dungeon-save';
+const SAVE_STORAGE_KEY = 'axolotl-save';
+const SAVE_OLD_STORAGE_KEY = 'axolotl-dungeon-save'; // the name used before the game was renamed
 const SAVE_VERSION = 1;
 const SAVE_SECRET = 'ax0l0tl-dungeon::caves-are-deep::d1d-y0u-r3ad-th1s?';
 
@@ -180,8 +181,21 @@ function isValidSave(state) {
     return true;
 }
 
+// moves something stored under an old name to its new name (once), so renaming a key doesn't lose it
+function moveStoredItem(oldKey, newKey) {
+    try {
+        const old = localStorage.getItem(oldKey);
+        if (old === null) return;
+        if (localStorage.getItem(newKey) === null) localStorage.setItem(newKey, old);
+        localStorage.removeItem(oldKey);
+    } catch (error) {
+        // storage blocked: nothing to move
+    }
+}
+
 // the stored save: { state }, { problem: 'none' } when there isn't one, or { problem: 'tampered' }
 function readSavedGame() {
+    moveStoredItem(SAVE_OLD_STORAGE_KEY, SAVE_STORAGE_KEY);
     let text = null;
     try {
         text = localStorage.getItem(SAVE_STORAGE_KEY);

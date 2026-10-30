@@ -9,7 +9,20 @@ body {
     display: flex;
 } */
 
+/* page text stays hidden until the Fredoka font has loaded, so it never shows in a fallback font (see index.html) */
+.fonts-loading #side-panel,
+.fonts-loading #game-title,
+.fonts-loading #speed,
+.fonts-loading #dev-stats,
+.fonts-loading #save-controls,
+.fonts-loading #away-popup {
+    visibility: hidden;
+}
+
+/* fills the window from the first paint (canvas.js also sets its size on resize) */
 #canvas-container {
+    width: 100vw;
+    height: 100vh;
     background-color: #5a5a5a;
 }
 
@@ -25,6 +38,7 @@ body {
 /* all text on the page shares one style: Fredoka in white with a slight dark teal edge. Only the Calories
    counter is pink, as the main heading. */
 #side-panel,
+#game-title,
 #speed,
 #dev-stats,
 #save-controls,
@@ -49,7 +63,7 @@ body {
     display: none;
 }
 
-/* Save / Load / New game, centred near the bottom of the right-hand area (position set in canvas.js) */
+/* the New game button (and save messages), centred near the bottom of the right-hand area (position set in canvas.js) */
 #save-controls {
     position: absolute;
     display: flex;
@@ -237,6 +251,21 @@ body {
     pointer-events: none;
 }
 
+/* the game's name, over the top of the canvas and centred across it. Uses the same sizing sum as the
+   canvas below (left padding, width), so it lines up from the first paint. */
+#game-title {
+    position: absolute;
+    top: 24px; /* SIDE_PANEL_TOP in canvas.js, so it lines up with the Calories counter */
+    left: 3px;
+    width: calc(min(100vw, 100vh) - 6px);
+    margin: 0;
+    text-align: center;
+    pointer-events: none;
+    z-index: 1;
+    font-size: clamp(32px, 5vw, 72px); /* same as #calories; fitCalories() keeps them equal when it shrinks */
+    font-weight: 700;
+}
+
 #calories {
     font-size: clamp(32px, 5vw, 72px);
     color: #ffc2d2;
@@ -258,12 +287,6 @@ body {
 
 #upgrades[hidden] {
     display: none;
-}
-
-#upgrades h2 {
-    margin: 0 0 16px;
-    font-size: clamp(20px, 2.6vw, 36px);
-    font-weight: 700;
 }
 
 #upgrade-buttons {
@@ -377,9 +400,17 @@ body {
     transform: rotate(var(--tilt));
 }
 
+/* Sized and placed here as well as in canvas.js, so a black square of the right size shows on the very first
+   paint, before any game code runs or the cave is built. The sum below is the same as sizeCanvas():
+   the shorter screen side, minus 3px padding (CANVAS_PADDING) and 2px border (CANVAS_BORDER) on each side. */
 canvas {
     position: absolute;
+    top: 3px;
+    left: 3px;
+    width: calc(min(100vw, 100vh) - 10px);
+    height: calc(min(100vw, 100vh) - 10px);
     margin: 0;
+    background: black;
     border: 2px solid black; /* keep in sync with CANVAS_BORDER in canvas.js */
     border-radius: 5px;
     -webkit-tap-highlight-color: transparent;

@@ -9,6 +9,7 @@ const container = document.querySelector('#container');
 const c = canvas.getContext('2d');
 const sidePanel = document.querySelector('#side-panel');
 const caloriesText = document.querySelector('#calories span');
+const gameTitle = document.querySelector('#game-title');
 const speedDisplay = document.querySelector('#speed');
 const SIDE_PANEL_TOP = 24; // distance from the top of the screen to the calories counter
 const SPEED_INSET = 24; // distance of the speed readout from the bottom and from the canvas
@@ -27,8 +28,8 @@ function showCalories() {
     fitCalories();
 }
 
-// shrinks the counter's text only when a long number wouldn't otherwise fit. Runs when the number changes or the
-// window is resized, never every frame.
+// shrinks the counter's text only when a long number wouldn't otherwise fit, and keeps the Axolotl title the same
+// size. Runs when the number changes, the window is resized or Fredoka finishes loading, never every frame.
 function fitCalories() {
     caloriesText.style.fontSize = '';
     const available = sidePanel.clientWidth - CALORIES_SIDE_CLEARANCE * 2;
@@ -42,6 +43,7 @@ function fitCalories() {
             caloriesText.style.fontSize = `${size}px`;
         }
     }
+    gameTitle.style.fontSize = caloriesText.style.fontSize;
 }
 
 // development readout: calories eaten in the last minute, to see what the upgrades really do.
@@ -85,6 +87,9 @@ function sizeCanvas() {
         Math.min(window.innerHeight, window.innerWidth) - CANVAS_PADDING * 2 - CANVAS_BORDER * 2;
     canvas.height = size;
     canvas.width = size;
+    // the CSS already sizes it for the first paint; pinning it to the exact drawing size here keeps it pixel-sharp
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
     canvas.style.left = CANVAS_PADDING + 'px';
     canvas.style.top = CANVAS_PADDING + 'px';
     canvasContainer.style.height = window.innerHeight + 'px';
@@ -178,7 +183,7 @@ function onFoodEaten(x, y, amount) {
 
 // one step of the game's logic, without drawing anything
 function stepGame() {
-    food.update();
+    food.update(score.eaten);
     me.hooverFood(food);
     me.update();
 
@@ -201,8 +206,15 @@ function stepGame() {
     }
 }
 
+// marks when the game first appears, readable later with performance.getEntriesByName('game-first-frame')
+let drawnFirstFrame = false;
+
 function animate() {
     requestAnimationFrame(animate);
+    if (!drawnFirstFrame) {
+        drawnFirstFrame = true;
+        requestAnimationFrame(() => performance.mark('game-first-frame'));
+    }
     // the background run may be finishing its last steps as the page comes back; let it, rather than doubling up
     if (runningInBackground) return;
     stepGame();
@@ -211,8 +223,7 @@ function animate() {
     terrain.drawView(me);
     food.drawView(me);
     me.draw();
-    fog.draw(me);
-    // bubbles go over the walls, food, axolotl and fog; only the "+N" numbers sit above them
+    // bubbles go over the walls, food and axolotl; only the "+N" numbers sit above them
     bubbles.update(me);
     bubbles.draw(me);
     scorePopups.draw(me);
@@ -232,6 +243,8 @@ addEventListener('resize', function () {
     init();
     fitCalories();
 });
+
+document.fonts.ready.then(fitCalories);
 
 addEventListener('mousemove', (e) => {
     updateMousePosition(e);
@@ -328,7 +341,6 @@ console.timeEnd('food generation');
 
 const scorePopups = new ScorePopups();
 const bubbles = new Bubbles();
-const fog = new FogOfWar();
 const upgradeShop = new UpgradeShop(score, me, showCalories);
 if (saved) upgradeShop.restore(saved.levels, saved.switchedOn);
 showCalories(); // the page's HTML says "Calories: 0", which is wrong for a saved game or map hacks
@@ -339,7 +351,8 @@ addEventListener('keydown', () => biteSounds.unlock());
 
 // --- sound on/off button (top right) ---
 // remembered in this browser between visits; it's just a preference, so it isn't part of the game save
-const SOUND_SETTING_KEY = 'axolotl-dungeon-sound';
+const SOUND_SETTING_KEY = 'axolotl-sound';
+moveStoredItem('axolotl-dungeon-sound', SOUND_SETTING_KEY); // its name before the game was renamed
 const soundToggle = document.querySelector('#sound-toggle');
 const SPEAKER_ON_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
@@ -378,12 +391,14 @@ soundToggle.addEventListener('mousedown', (e) => e.stopPropagation());
 
 // --- saving ---
 
-const SAVE_STATUS_MS = 2500; // how long a message like "Game saved" stays up
+// there's no Save or Load button: the game saves itself every AUTO_SAVE_MS and when the page is left, and a page
+// refresh always starts from the latest save
+const SAVE_STATUS_MS = 2500; // how long a message about the save stays up
 const AUTO_SAVE_MS = 10000;
 const saveStatus = document.querySelector('#save-status');
 const confirmOverlay = document.querySelector('#confirm-overlay');
 let saveStatusTimer = null;
-// set while leaving the page for Load or New game, so the save-on-close doesn't overwrite what we want
+// set while leaving the page for New game, so the save-on-close doesn't write the old game back
 let leavingPage = false;
 
 function showSaveStatus(message) {
@@ -415,15 +430,6 @@ function saveGame() {
     return writeSavedGame(gatherSaveState());
 }
 
-// the page starts from the save, so loading is just a reload without saving on the way out
-function loadGame() {
-    const check = readSavedGame();
-    if (check.problem === 'none') return showSaveStatus('No saved game yet');
-    if (check.problem) return showSaveStatus("The saved game can't be loaded");
-    leavingPage = true;
-    location.reload();
-}
-
 function startNewGame() {
     leavingPage = true;
     wipeSavedGame();
@@ -439,14 +445,6 @@ function closeNewGameConfirm() {
     confirmOverlay.hidden = true;
 }
 
-document.querySelector('#save-button').addEventListener('click', (e) => {
-    e.currentTarget.blur();
-    showSaveStatus(saveGame() ? 'Game saved' : "Couldn't save the game");
-});
-document.querySelector('#load-button').addEventListener('click', (e) => {
-    e.currentTarget.blur();
-    loadGame();
-});
 document.querySelector('#new-game-button').addEventListener('click', (e) => {
     e.currentTarget.blur();
     openNewGameConfirm();

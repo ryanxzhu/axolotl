@@ -42,7 +42,8 @@ const SMELL_SEARCH_INTERVAL = 8; // frames between sniffs while it has nothing t
 const SMELL_GIVE_UP_FRAMES = 240; // stop chasing a piece it can't reach (e.g. behind rock) after this long
 const SMELL_SLOW_TURN_ANGLE = 0.6; // if the food is this far off to the side (radians)...
 const SMELL_SLOW_TURN_DISTANCE = 80; // ...and this close (px), stop pushing so it can turn tighter
-// how much of the body's pulse the Hoover ring copies (0.5 = half as much, so up to 5% bigger)
+const SMELL_RING_COLOR = 'rgba(255, 255, 255, 0.4)';
+// how much of the body's pulse the Hoover and smell rings copy (0.5 = half as much, so up to 5% bigger)
 const RING_PULSE_STRENGTH = 0.5;
 // the body as a few circles along its length, in local units of radius: [distance forward, circle radius]
 const BODY_CIRCLES = [
@@ -629,7 +630,7 @@ class Meeple {
 
     draw() {
         const bulgeScale = this.bulgingRadius.radius / this.radius;
-        // the Hoover ring breathes in time with the body, but more gently. Drawing only: its real
+        // the Hoover and smell rings breathe in time with the body, but more gently. Drawing only: their real
         // reach doesn't change.
         const ringScale = 1 + (bulgeScale - 1) * RING_PULSE_STRENGTH;
 
@@ -650,7 +651,15 @@ class Meeple {
             c.closePath();
         }
 
-        // (smell's reach isn't drawn here: the edge of the fog of war shows it, see Fog.js)
+        // the smell reach: a wider, faint white ring around the head
+        if (this.smellRadius > 0) {
+            c.beginPath();
+            c.arc(HEAD_FORWARD * this.radius, 0, this.smellRadius * ringScale, 0, Math.PI * 2);
+            c.lineWidth = 1.5;
+            c.strokeStyle = SMELL_RING_COLOR;
+            c.stroke();
+            c.closePath();
+        }
 
         c.scale(bulgeScale, bulgeScale);
 

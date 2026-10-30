@@ -4,7 +4,7 @@ const SEAWEED_COUNT = 2400;
 const WORM_COUNT = 2400;
 // on top of that, this many seaweed and this many worms appear somewhere on the map every second,
 // until the map holds MAX_FOOD_MULTIPLIER times the starting total
-const BACKGROUND_SPAWNS_PER_SECOND = 1 * GAME_SPEED;
+const BACKGROUND_SPAWNS_PER_SECOND = 10 * GAME_SPEED;
 const MAX_FOOD_MULTIPLIER = 10;
 const FRAMES_PER_SECOND = 60; // the game advances a fixed step per frame and assumes 60 frames a second
 // food perishes this long after it appears, fading out over its last second, and is replaced somewhere else
@@ -13,6 +13,16 @@ const PERISH_FADE_FRAMES = FRAMES_PER_SECOND;
 const PERISH_QUEUE_COMPACT_AT = 5000; // how many handled entries pile up before the queue is tidied
 const SEAWEED_CALORIES = 1 * GAME_SPEED;
 const WORM_CALORIES = 2 * GAME_SPEED;
+
+// shrimp, the third food, arrive once this many calories have been eaten in total. The map starts with none;
+// after that SHRIMP_SPAWNS_PER_SECOND appear every second until there are SHRIMP_MAX. At or below SHRIMP_LINE
+// (the starting worm count), an eaten shrimp is replaced straight away; above it, it isn't. Shrimp keep their own
+// count, separate from the seaweed and worm rules above.
+const SHRIMP_REVEAL_AT = revealAfterEating(150);
+const SHRIMP_CALORIES = 10 * GAME_SPEED;
+const SHRIMP_SPAWNS_PER_SECOND = 10 * GAME_SPEED;
+const SHRIMP_LINE = WORM_COUNT;
+const SHRIMP_MAX = SHRIMP_LINE * MAX_FOOD_MULTIPLIER;
 
 // food is sorted into square buckets, so drawing and eating only look at food near the axolotl
 const FOOD_BUCKET_PX = 400;
@@ -147,11 +157,100 @@ function makeWormSprite() {
     return sprite;
 }
 
+// a small grey cartoon shrimp, almost krill: a curled, segmented body that comes to a sharp point at the nose and
+// at the tail fan, with a beady eye, little legs and two long feelers. Only one is ever drawn; every shrimp shares it.
+const SHRIMP_SCALE = 1.5; // drawn at this multiple of the original 32px design
+function makeShrimpSprite() {
+    const size = Math.round(32 * SHRIMP_SCALE);
+    const sprite = document.createElement('canvas');
+    sprite.width = size;
+    sprite.height = size;
+    const g = sprite.getContext('2d');
+    g.translate(size / 2, size / 2);
+    g.scale(SHRIMP_SCALE, SHRIMP_SCALE);
+    g.rotate(-0.5);
+
+    const outline = 'hsl(210, 10%, 28%)';
+    const shell = 'hsl(210, 8%, 68%)';
+    g.lineJoin = 'miter';
+
+    // feelers, sweeping back from the head (drawn first so the body sits on top)
+    g.strokeStyle = outline;
+    g.lineCap = 'round';
+    g.lineWidth = 0.9;
+    for (const lift of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(7, -1.5);
+        g.quadraticCurveTo(13, -6 + lift * 2, 6, -11 + lift * 2);
+        g.stroke();
+    }
+
+    // little legs under the belly
+    g.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+        const x = 4 - i * 3;
+        g.beginPath();
+        g.moveTo(x, 1.5);
+        g.lineTo(x - 1, 5);
+        g.stroke();
+    }
+
+    // fanned tail, three sharp prongs
+    g.beginPath();
+    g.moveTo(-8, 0.5);
+    g.lineTo(-14, -3);
+    g.lineTo(-11.5, 1.5);
+    g.lineTo(-14, 6);
+    g.closePath();
+    g.fillStyle = shell;
+    g.fill();
+    g.lineWidth = 1.1;
+    g.stroke();
+
+    // curled body: fat in the middle, tapering to a point at the tail and a sharp spike of a nose
+    g.beginPath();
+    g.moveTo(-10, 1.5);
+    g.quadraticCurveTo(-2, -10, 7, -3);
+    g.lineTo(12, -2.5); // the nose spike
+    g.lineTo(7, 0.5);
+    g.quadraticCurveTo(-1, 4, -10, 1.5);
+    g.closePath();
+    g.fillStyle = shell;
+    g.fill();
+    g.lineWidth = 1.3;
+    g.stroke();
+
+    // shell segments across the back
+    g.lineWidth = 0.9;
+    g.strokeStyle = 'hsla(210, 10%, 30%, 0.75)';
+    for (const x of [-5, -2, 1]) {
+        g.beginPath();
+        g.moveTo(x, -4.2);
+        g.lineTo(x + 0.3, 1.5);
+        g.stroke();
+    }
+
+    // eye with a glint
+    g.beginPath();
+    g.arc(4.5, -2, 1.5, 0, Math.PI * 2);
+    g.fillStyle = 'black';
+    g.fill();
+    g.beginPath();
+    g.arc(4.1, -2.4, 0.55, 0, Math.PI * 2);
+    g.fillStyle = 'white';
+    g.fill();
+
+    return sprite;
+}
+
 // each type's starting count, calories, eating radius and shape maker. uniqueShapes is how many different
 // shapes are generated for it; after that, spawns reuse those shapes at random.
 const FOOD_TYPES = {
     seaweed: { count: SEAWEED_COUNT, calories: SEAWEED_CALORIES, radius: 9, makeSprite: makeSeaweedSprite, uniqueShapes: SEAWEED_COUNT },
     worm: { count: WORM_COUNT, calories: WORM_CALORIES, radius: 10, makeSprite: makeWormSprite, uniqueShapes: 20 },
+    // shrimp start at 0 and follow their own rules (SHRIMP_LINE, SHRIMP_MAX), so they're left out of the
+    // seaweed and worm counts
+    shrimp: { count: 0, calories: SHRIMP_CALORIES, radius: 13, makeSprite: makeShrimpSprite, uniqueShapes: 1, ownCount: true },
 };
 
 class FoodField {
@@ -165,11 +264,13 @@ class FoodField {
         this.mapHeight = (terrain.full.length - 1) * PIXEL_RATIO;
 
         this.frame = 0; // advanced by update(); perish times are counted in frames
-        this.count = 0; // pieces on the map right now
+        this.count = 0; // seaweed and worms on the map right now
         this.startCount = 0; // the starting total; eaten food is only replaced while at or below this
         for (const type in FOOD_TYPES) this.startCount += FOOD_TYPES[type].count;
         this.maxCount = this.startCount * MAX_FOOD_MULTIPLIER;
         this.backgroundSpawnProgress = 0;
+        this.shrimpCount = 0; // shrimp on the map right now, counted apart from the rest
+        this.shrimpSpawnProgress = 0;
 
         // every piece in the order it will perish. Food always lives the same length of time, so new pieces
         // go on the end and only the front ever needs checking. perishHead is the first piece not yet handled.
@@ -200,17 +301,27 @@ class FoodField {
         return pool[Math.floor(Math.random() * pool.length)];
     }
 
-    // called once per frame: background spawning, and food perishing (and being replaced elsewhere)
-    update() {
+    // called once per frame with the total calories eaten: background spawning, and food perishing (and being
+    // replaced elsewhere)
+    update(eaten) {
         this.frame++;
 
         if (this.count < this.maxCount) {
-            this.backgroundSpawnProgress += BACKGROUND_SPAWNS_PER_SECOND / FRAMES_PER_SECOND;
-            while (this.backgroundSpawnProgress >= 1) {
-                this.backgroundSpawnProgress--;
+            // progress is counted in 60ths of a spawn, so whole-number rates add up exactly with no rounding drift
+            this.backgroundSpawnProgress += BACKGROUND_SPAWNS_PER_SECOND;
+            while (this.backgroundSpawnProgress >= FRAMES_PER_SECOND) {
+                this.backgroundSpawnProgress -= FRAMES_PER_SECOND;
                 for (const type in FOOD_TYPES) {
-                    if (this.count < this.maxCount) this.spawn(type);
+                    if (!FOOD_TYPES[type].ownCount && this.count < this.maxCount) this.spawn(type);
                 }
+            }
+        }
+
+        if (eaten >= SHRIMP_REVEAL_AT && this.shrimpCount < SHRIMP_MAX) {
+            this.shrimpSpawnProgress += SHRIMP_SPAWNS_PER_SECOND;
+            while (this.shrimpSpawnProgress >= FRAMES_PER_SECOND && this.shrimpCount < SHRIMP_MAX) {
+                this.shrimpSpawnProgress -= FRAMES_PER_SECOND;
+                this.spawn('shrimp');
             }
         }
 
@@ -234,7 +345,19 @@ class FoodField {
         const index = bucket.indexOf(food);
         if (index !== -1) bucket.splice(index, 1);
         food.gone = true; // lets anything still tracking this piece (e.g. smell) know it's gone
-        this.count--;
+        this.changeCount(food.type, -1);
+    }
+
+    // keeps the running count for the right group: shrimp, or seaweed and worms
+    changeCount(type, change) {
+        if (FOOD_TYPES[type].ownCount) this.shrimpCount += change;
+        else this.count += change;
+    }
+
+    // whether an eaten piece of this type is replaced straight away: only while its group is at or below its line
+    replacesEaten(type) {
+        if (FOOD_TYPES[type].ownCount) return this.shrimpCount <= SHRIMP_LINE;
+        return this.count <= this.startCount;
     }
 
     bucketFor(x, y) {
@@ -274,7 +397,7 @@ class FoodField {
         };
         this.bucketFor(x, y).push(food);
         this.perishQueue.push(food);
-        this.count++;
+        this.changeCount(type, 1);
     }
 
     // the closest food within `radius` of (x, y) with no rock in between, or null. Skips `ignore` (a piece it
@@ -385,7 +508,7 @@ class FoodField {
 
     // eats any food touching any part of the axolotl's body (head, body or tail, so backing into it counts).
     // onEat(x, y, calories) is called for each piece. A replacement spawns elsewhere only while the map holds
-    // no more food than it started with.
+    // no more food than it started with (for shrimp: no more than SHRIMP_LINE).
     // Returns the calories gained this frame.
     eatTouching(meeple, onEat) {
         const facingX = Math.sin(meeple.angle);
@@ -404,11 +527,10 @@ class FoodField {
                 for (let i = bucket.length - 1; i >= 0; i--) {
                     const food = bucket[i];
                     if (!this.touchesBody(food, meeple, facingX, facingY)) continue;
-                    // only replaced while the map holds no more than it started with
-                    const replace = this.count <= this.startCount;
+                    const replace = this.replacesEaten(food.type);
                     bucket.splice(i, 1);
                     food.gone = true; // lets anything still tracking this piece (e.g. smell) know it's gone
-                    this.count--;
+                    this.changeCount(food.type, -1);
                     const gained = FOOD_TYPES[food.type].calories;
                     calories += gained;
                     onEat(food.x, food.y, gained);

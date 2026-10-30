@@ -1,5 +1,5 @@
-// upgrades bought with calories, shown under "Spend Calories" beside the map
-const UPGRADES_REVEAL_AT = revealAfterEating(5); // calories eaten in total before the Spend Calories area appears
+// upgrades bought with calories, shown under the Calories counter beside the map
+const UPGRADES_REVEAL_AT = revealAfterEating(5); // calories eaten in total before the upgrades area appears
 // every upgrade follows the same rule: each level makes its effect 20% stronger than the last, and costs
 // 1.5× the previous level's price
 const UPGRADE_EFFECT_GROWTH = 1.2;
@@ -41,7 +41,7 @@ const UPGRADES = [
     {
         id: 'autoSwim',
         name: 'Auto swim',
-        blurb: 'Swim on its own, sniffing out nearby food. Click again to take back control',
+        blurb: 'Swim on your own. Click again to take back control',
         baseCost: 40,
         revealAt: revealAfterEating(50),
         oneTime: true,

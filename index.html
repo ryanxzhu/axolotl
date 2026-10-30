@@ -7,7 +7,32 @@
         <link rel="icon" type="image/svg+xml" href="favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap" />
+        <!-- The black canvas paints straight away, but text waits for Fredoka: the font downloads in the background
+             while the page's text stays hidden (the fonts-loading class), then shows only once Fredoka is ready.
+             If the font fails or takes over FONT_WAIT_MS, the text shows anyway so the game never stays wordless. -->
+        <script>
+            document.documentElement.classList.add('fonts-loading');
+            const FONT_WAIT_MS = 1000;
+            function showText() {
+                document.documentElement.classList.remove('fonts-loading');
+            }
+            setTimeout(showText, FONT_WAIT_MS);
+            function fontStylesheetLoaded(link) {
+                link.onload = null;
+                link.rel = 'stylesheet';
+                document.fonts.load('700 20px Fredoka').then(showText, showText);
+            }
+        </script>
+        <link
+            rel="preload"
+            as="style"
+            href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap"
+            onload="fontStylesheetLoaded(this)"
+            onerror="showText()"
+        />
+        <noscript>
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap" />
+        </noscript>
         <link rel="stylesheet" href="styles.css" />
         <script defer src="GameSettings.js"></script>
         <script defer src="utilityFunctions.js"></script>
@@ -16,7 +41,6 @@
         <script defer src="Food.js"></script>
         <script defer src="ScorePopups.js"></script>
         <script defer src="Bubbles.js"></script>
-        <script defer src="Fog.js"></script>
         <script defer src="BiteSounds.js"></script>
         <script defer src="Upgrades.js"></script>
         <script defer src="SaveGame.js"></script>
@@ -24,17 +48,17 @@
         <script defer src="canvas.js"></script>
         <script defer src="responsive.js"></script>
         <script defer src="main.js"></script>
-        <title>Axolotl Dungeon</title>
+        <title>Axolotl</title>
     </head>
     <body>
         <div id="container">
             <div id="canvas-container">
                 <canvas></canvas>
             </div>
+            <h1 id="game-title">Axolotl</h1>
             <div id="side-panel">
                 <div id="calories"><span>Calories: 0</span></div>
                 <div id="upgrades" hidden>
-                    <h2>Spend Calories</h2>
                     <div id="upgrade-buttons"></div>
                 </div>
             </div>
@@ -45,8 +69,6 @@
             </div>
             <div id="save-controls">
                 <div class="save-buttons">
-                    <button id="save-button">Save</button>
-                    <button id="load-button">Load</button>
                     <button id="new-game-button">New game</button>
                 </div>
                 <div id="save-status"></div>
