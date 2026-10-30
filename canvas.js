@@ -7,10 +7,17 @@ const canvas = document.querySelector('canvas');
 const canvasContainer = document.querySelector('#canvas-container');
 const container = document.querySelector('#container');
 const c = canvas.getContext('2d');
-const chompsDisplay = document.querySelector('#chomps');
-const chompsText = chompsDisplay.querySelector('span');
-const CHOMPS_TOP = 24; // distance from the top of the screen to the chomps counter
-let chomps = 0;
+const sidePanel = document.querySelector('#side-panel');
+const caloriesText = document.querySelector('#calories span');
+const speedDisplay = document.querySelector('#speed');
+const SIDE_PANEL_TOP = 24; // distance from the top of the screen to the calories counter
+const SPEED_INSET = 24; // distance of the speed readout from the bottom and from the canvas
+// calories: what can be spent right now. eaten: total ever eaten, which unlocks the upgrades area
+const score = { calories: 0, eaten: 0 };
+
+function showCalories() {
+    caloriesText.textContent = `Calories: ${score.calories}`;
+}
 
 // square canvas, sized by the shorter screen side (usually height on a laptop) and pinned to the left
 function sizeCanvas() {
@@ -23,11 +30,13 @@ function sizeCanvas() {
     canvasContainer.style.height = window.innerHeight + 'px';
     canvasContainer.style.width = window.innerWidth + 'px';
     container.style.height = window.innerHeight + 'px';
-    // the counter spans the whole area right of the canvas, so its centred text sits in the middle of it
+    // the side panel spans the whole area right of the canvas, so its centred contents sit in the middle of it
     const canvasRight = CANVAS_PADDING + size + CANVAS_BORDER * 2;
-    chompsDisplay.style.left = canvasRight + 'px';
-    chompsDisplay.style.width = window.innerWidth - canvasRight + 'px';
-    chompsDisplay.style.top = CHOMPS_TOP + 'px';
+    sidePanel.style.left = canvasRight + 'px';
+    sidePanel.style.width = window.innerWidth - canvasRight + 'px';
+    sidePanel.style.top = SIDE_PANEL_TOP + 'px';
+    speedDisplay.style.left = canvasRight + SPEED_INSET + 'px';
+    speedDisplay.style.bottom = SPEED_INSET + 'px';
     CENTRE_PIXEL_X = size / 2;
     CENTRE_PIXEL_Y = size / 2;
 }
@@ -106,15 +115,18 @@ function animate() {
     requestAnimationFrame(animate);
     c.clearRect(0, 0, canvas.width, canvas.height);
     terrain.drawView(me);
+    me.hooverFood(food);
     food.drawView(me);
     me.update();
 
     const gained = food.eatTouching(me, onFoodEaten);
     if (gained > 0) {
-        chomps += gained;
-        chompsText.textContent = `Chomps: ${chomps}`;
+        score.calories += gained;
+        score.eaten += gained;
+        showCalories();
+        upgradeShop.refresh();
         // a small bounce
-        chompsText.animate(
+        caloriesText.animate(
             [{ transform: 'scale(1)' }, { transform: 'scale(1.07)' }, { transform: 'scale(1)' }],
             { duration: 260, easing: 'ease-out' }
         );
@@ -209,6 +221,7 @@ const food = new FoodField(terrain, me);
 console.timeEnd('food generation');
 
 const scorePopups = new ScorePopups();
+const upgradeShop = new UpgradeShop(score, me, showCalories);
 const biteSounds = new BiteSounds();
 // sound can only start after the player interacts with the page
 addEventListener('mousedown', () => biteSounds.unlock());

@@ -12,23 +12,137 @@ body {
     background-color: #5a5a5a;
 }
 
-/* fills the area to the right of the canvas (position and width set in canvas.js), text centred in it */
-#chomps {
+/* the column to the right of the canvas (position and width set in canvas.js), everything centred in it */
+#side-panel {
     position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     text-align: center;
+}
+
+/* all text on the page shares one style: Fredoka in white with a slight dark teal edge. Only the Calories
+   counter is pink, as the main heading. */
+#side-panel,
+#speed {
     font-family: 'Fredoka', system-ui, sans-serif;
-    font-size: clamp(32px, 5vw, 72px);
     font-weight: 700;
     letter-spacing: 1px;
+    color: white;
+    text-shadow: 0 1.5px 0 hsl(173, 60%, 12%);
     user-select: none;
+}
+
+/* near the bottom of the area right of the canvas, left-aligned; position set in canvas.js */
+#speed {
+    position: absolute;
+    font-size: clamp(18px, 2.2vw, 30px);
     pointer-events: none;
 }
 
-/* the text itself: solid axolotl pink with a slight dark teal edge and a faint pink glow */
-#chomps span {
-    display: inline-block;
+#speed[hidden] {
+    display: none;
+}
+
+#calories {
+    font-size: clamp(32px, 5vw, 72px);
     color: #ffc2d2;
     text-shadow: 0 1.5px 0 hsl(173, 60%, 12%), 0 0 4px rgba(255, 111, 145, 0.25);
+    pointer-events: none;
+}
+
+/* inline-block so it can bounce when food is eaten */
+#calories span {
+    display: inline-block;
+}
+
+#upgrades {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 28px;
+}
+
+#upgrades[hidden] {
+    display: none;
+}
+
+#upgrades h2 {
+    margin: 0 0 16px;
+    font-size: clamp(20px, 2.6vw, 36px);
+    font-weight: 700;
+}
+
+#upgrade-buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+/* colour, blobby shape and tilt are randomised per button in Upgrades.js */
+.upgrade-button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 250px;
+    padding: 16px 16px 16px 24px;
+    font: inherit;
+    font-size: 14px;
+    color: inherit;
+    border: 3px solid;
+    cursor: pointer;
+    /* a slight raised edge underneath, so a pressed-in switch (below) clearly looks pushed down */
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+    transform: rotate(var(--tilt));
+    transition: transform 0.12s ease-out, filter 0.12s ease-out, box-shadow 0.12s ease-out, opacity 0.2s;
+}
+
+/* locked upgrades aren't shown at all (display: flex above would otherwise override `hidden`) */
+.upgrade-button[hidden] {
+    display: none;
+}
+
+.upgrade-button:hover {
+    filter: brightness(1.15);
+    transform: rotate(var(--tilt)) scale(1.04);
+}
+
+.upgrade-button .upgrade-name {
+    flex: 1;
+    text-align: left;
+}
+
+.upgrade-button .upgrade-level {
+    font-size: 10px;
+    opacity: 0.8;
+}
+
+/* the price, in a little pill beside the name */
+.upgrade-button .upgrade-cost {
+    padding: 3px 9px;
+    font-size: 11px;
+    white-space: nowrap;
+    background: rgba(0, 0, 0, 0.28);
+    border-radius: 999px;
+}
+
+/* a one-time switch that's on: sunk into the page, darker, with its raised edge gone and an inner shadow */
+.upgrade-button.pressed,
+.upgrade-button.pressed:hover {
+    filter: brightness(0.75);
+    box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.55);
+    transform: rotate(var(--tilt)) translateY(4px) scale(0.97);
+}
+
+.upgrade-button.cant-afford {
+    opacity: 0.5;
+    filter: saturate(0.6);
+    cursor: not-allowed;
+}
+
+.upgrade-button.cant-afford:hover {
+    transform: rotate(var(--tilt));
 }
 
 canvas {

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <!-- the axolotl's face from the game, front-on: same shapes and colours as drawHead/drawGills/drawFace in Meeple.js -->
+    <g stroke="#ff6f91" stroke-width="5.4" stroke-linecap="round">
+        <!-- gills: three fronds each side, fanning up and out -->
+        <line x1="17" y1="30" x2="3.4" y2="23.8" />
+        <line x1="17" y1="30" x2="8" y2="18" />
+        <line x1="17" y1="30" x2="14.9" y2="15.2" />
+        <line x1="47" y1="30" x2="60.6" y2="23.8" />
+        <line x1="47" y1="30" x2="56" y2="18" />
+        <line x1="47" y1="30" x2="49.1" y2="15.2" />
+    </g>
+    <!-- head -->
+    <ellipse cx="32" cy="36" rx="19.5" ry="16.5" fill="#ffb6c8" stroke="#a63f62" stroke-width="2.4" />
+    <!-- eyes with a white highlight -->
+    <circle cx="20.6" cy="40" r="3.4" fill="black" />
+    <circle cx="43.4" cy="40" r="3.4" fill="black" />
+    <circle cx="19.5" cy="38.9" r="1.2" fill="white" />
+    <circle cx="42.3" cy="38.9" r="1.2" fill="white" />
+    <!-- smile -->
+    <path d="M26.6 45.4 A8.4 8.4 0 0 0 37.4 45.4" fill="none" stroke="#a63f62" stroke-width="2.4" stroke-linecap="round" />
+</svg>

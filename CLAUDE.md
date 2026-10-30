@@ -16,7 +16,7 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
 ## How it fits together
 
 - `GameSettings.js` (loaded first): `GAME_SPEED`, normally 1, which the player raises to test later stages quickly.
-  - It multiplies gameplay pace: top speed, acceleration, bounce speed, the post-bounce swing rate, and chomps per food. Any new pace-related value (speeds, rewards, rates of progress) should be multiplied by it too.
+  - It multiplies gameplay pace: top speed, acceleration, bounce speed, the post-bounce swing rate, and calories per food. Any new pace-related value (speeds, rewards, rates of progress) should be multiplied by it too.
   - Don't scale looks, sizes, animation timing or per-frame fractions like water drag; a fraction above 1 would make things speed up by themselves.
   - Movement is split into steps of at most `COLLISION_STEP_PX` with a rock check after each (`move` in `Meeple.js`), so high speeds can't tunnel through thin walls.
 - `Terrain.js`: builds the cave from white noise smoothed by a cellular automaton, then adds a solid wall border. One cell is `PIXEL_RATIO` (50) px.
@@ -33,13 +33,26 @@ Serve the folder and open it, e.g. `python -m http.server 8123` then http://loca
   - Bouncing (`bounce`): the path mirrors off the rock surface at full speed, which is as strong a bounce as the original game had. The axolotl then swings round to the new heading at `BOUNCE_TURN_RATE` per frame instead of snapping. It picks whichever is the smaller turn: swimming forwards along the new path or backing along it.
   - Angle 0 for the facing `angle` points down the screen (+y), and the angle grows towards +x.
   - `draw()` rotates the canvas so the head points along local +x. A single swimming wave (`swimOffset`) moves the head a little, the body more and the tail the most, all in sync; its speed follows `velocity`.
-- `Food.js`: seaweed (1 chomp) and worms (2 chomps), kept at a fixed count (`SEAWEED_COUNT`, `WORM_COUNT`) in open water.
-  - Every seaweed gets its own randomly generated sprite. All worms share one sprite, each drawn at its own angle.
+- `Food.js`: seaweed (1 calorie) and worms (2 calories), kept at a fixed count (`SEAWEED_COUNT` 2,400, `WORM_COUNT` 800) in open water.
+  - Every seaweed and worm gets its own randomly generated sprite. Seaweed varies in its lumpy outline. Worms keep the same colours and size but vary in how they curve (arc, C or S) and the angle they lie at; each has two small eyes at its head end.
   - Food sits in 400px buckets, so drawing and the eating check only look at food near the axolotl.
   - Food pulses in step with the axolotl, using the axolotl's own `bulgingRadius`.
   - Any of the three body circles touching a piece eats it, so backing into food counts. Eaten food respawns at a random spot in the water at least `FOOD_SPAWN_CLEARANCE` px away from the axolotl.
   - Eating plays a quick open-and-close of the mouth (`MOUTH_OPEN_FRAMES` in `Meeple.js`).
-- Chomps (the score): an HTML `#chomps` element, not drawn on the canvas. It spans the area right of the map with its text centred, sized and positioned in `sizeCanvas`, styled as big solid-pink text with a subtle teal edge, and it bounces slightly on each eat. The player wants it subtle, not flashy. It's only updated when something is eaten, never every frame. Text uses the Fredoka Google font, loaded in `index.html`.
+- Side panel (`#side-panel`, HTML, not canvas): spans the area right of the map with everything centred, positioned in `sizeCanvas`.
+  - All page text shares one style: the Fredoka Google font (loaded in `index.html`) in white with a subtle teal edge. Only the Calories counter is pink, as the main heading. The player wants it subtle, not flashy.
+  - Calories counter (`#calories`): shows `score.calories`, the spendable balance, and bounces slightly on each eat. `score.eaten` is the lifetime total. Page text only updates when something is eaten or bought, never every frame.
+- `Upgrades.js`: the "Spend Calories" area. It appears once `score.eaten` reaches `UPGRADES_REVEAL_AT` (5) and stays visible after spending.
+  - `UPGRADES` lists each upgrade with its first price (`baseCost`) and `revealAt`, the total calories eaten (`score.eaten`) before it appears. Until then it is hidden completely, and it never depends on other upgrades being bought.
+  - Shared rule for every upgrade: each level's effect is 20% stronger than the last (`UPGRADE_EFFECT_GROWTH`), and each level costs 1.5× the previous (`UPGRADE_COST_GROWTH`). Prices round up to whole numbers.
+  - Swim faster: from 10 calories, appears at 5 eaten. Speed is 1.2^level via `Meeple.setSpeedMultiplier`, which scales top speed, acceleration and the kick together.
+  - Hoover food: from 20 calories, appears at 15 eaten. Food within `hooverRadius` of the head (36px at level 1, +20% per level) is pulled to the mouth (`FoodField.hooverTowards`, faster as it gets closer, `HOOVER_SPEED`) and eaten on touch. A faint white ring around the head shows the reach.
+  - Auto swim: 40 calories, appears at 50 eaten, `oneTime`. Bought once, it then becomes a free on/off switch that stays on the page: pressed in (sunk, darker, inner shadow, "on") while on, popped up ("off") while off. While on (`Meeple.setAutoSwim`/`autoPilot`):
+    - W, clicks and mouse movement do nothing.
+    - It swims forwards at the held-W top speed and turns randomly left, right or straight for random stretches, like random A/D presses.
+    - After a wall hit it stops pushing and turns away from the rock (`AUTO_RECOVER_FRAMES`) before carrying on.
+  - Buttons get a random colour, a blobby `border-radius` (8 random values), a slight tilt and a raised bottom edge every load. The price sits in a pill beside the name.
+  - `#speed` appears near the bottom, left-aligned in the right-hand area, after the first Swim faster. It's display only: the speed multiplier × `SPEED_DISPLAY_BASE` (10), rounded down to a whole number, so it reads 12, 14, 17, 20, 24…
 - `ScorePopups.js`: a "+N" in bold white Fredoka rises from each eaten piece like a bubble (pop, wobble, fade) and is drawn on the canvas over everything.
 - `BiteSounds.js`: every bite plays one underwater bubble pop, synthesized once with no sound files: a sine rising from `BUBBLE_HZ` that dies away fast.
   - The player chose this from 20 candidates; slurps, crunches and gulps were rejected.

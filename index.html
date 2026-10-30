@@ -4,6 +4,7 @@
         <meta charset="UTF-8" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" type="image/svg+xml" href="favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap" />
@@ -15,6 +16,7 @@
         <script defer src="Food.js"></script>
         <script defer src="ScorePopups.js"></script>
         <script defer src="BiteSounds.js"></script>
+        <script defer src="Upgrades.js"></script>
         <script defer src="canvas.js"></script>
         <script defer src="responsive.js"></script>
         <script defer src="main.js"></script>
@@ -25,7 +27,14 @@
             <div id="canvas-container">
                 <canvas></canvas>
             </div>
-            <div id="chomps"><span>Chomps: 0</span></div>
+            <div id="side-panel">
+                <div id="calories"><span>Calories: 0</span></div>
+                <div id="upgrades" hidden>
+                    <h2>Spend Calories</h2>
+                    <div id="upgrade-buttons"></div>
+                </div>
+            </div>
+            <div id="speed" hidden>Speed: 1.0</div>
             <!-- <div id="info">Upgrades1</div> -->
         </div>
     </body>

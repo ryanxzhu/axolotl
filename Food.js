@@ -1,11 +1,13 @@
 // how many of each food are on the map at once; eaten food respawns elsewhere, so these stay constant
-const SEAWEED_COUNT = 1200;
-const WORM_COUNT = 400;
-const SEAWEED_CHOMPS = 1 * GAME_SPEED;
-const WORM_CHOMPS = 2 * GAME_SPEED;
+const SEAWEED_COUNT = 2400;
+const WORM_COUNT = 800;
+const SEAWEED_CALORIES = 1 * GAME_SPEED;
+const WORM_CALORIES = 2 * GAME_SPEED;
 
 // food is sorted into square buckets, so drawing and eating only look at food near the axolotl
 const FOOD_BUCKET_PX = 400;
+// how fast the Hoover food upgrade pulls food at the edge of its reach, in px per frame (up to 3× near the mouth)
+const HOOVER_SPEED = 1.2 * GAME_SPEED;
 // new food never appears this close to the axolotl, so it doesn't pop up right in front of it
 const FOOD_SPAWN_CLEARANCE = 50;
 
@@ -58,7 +60,9 @@ function makeSeaweedSprite() {
     return sprite;
 }
 
-// a short, fat worm with a slight bend; every worm uses this same shape
+// a short, fat worm, each one curved a little differently and lying at a random angle. Same colours and
+// rough size every time; the body is a curve with two random bend points, so it comes out as a gentle arc,
+// a "C" or an "S" wiggle
 function makeWormSprite() {
     const size = 40;
     const sprite = document.createElement('canvas');
@@ -66,15 +70,17 @@ function makeWormSprite() {
     sprite.height = size;
     const g = sprite.getContext('2d');
     g.translate(size / 2, size / 2);
+    g.rotate(Math.random() * Math.PI * 2);
 
-    const halfLength = 11;
-    const bend = 5;
+    const halfLength = 11 * randomBetween(0.9, 1.1);
+    const bendNearHead = randomBetween(-8, 8);
+    const bendNearTail = randomBetween(-8, 8);
     const thickness = 9;
     const hue = 8;
     const tracePath = () => {
         g.beginPath();
         g.moveTo(-halfLength, 0);
-        g.quadraticCurveTo(0, bend, halfLength, 0);
+        g.bezierCurveTo(-halfLength / 3, bendNearHead, halfLength / 3, bendNearTail, halfLength, 0);
     };
 
     g.lineCap = 'round';
@@ -87,32 +93,55 @@ function makeWormSprite() {
     g.strokeStyle = `hsl(${hue}, 60%, 62%)`;
     g.stroke();
 
+    // the curve's four control points, for finding points along it
+    const px = [-halfLength, -halfLength / 3, halfLength / 3, halfLength];
+    const py = [0, bendNearHead, bendNearTail, 0];
+    // the point at t (0 = head end, 1 = tail end) and a unit vector across the body there
+    const along = (t) => {
+        const u = 1 - t;
+        const x = u * u * u * px[0] + 3 * u * u * t * px[1] + 3 * u * t * t * px[2] + t * t * t * px[3];
+        const y = u * u * u * py[0] + 3 * u * u * t * py[1] + 3 * u * t * t * py[2] + t * t * t * py[3];
+        const dx = 3 * u * u * (px[1] - px[0]) + 6 * u * t * (px[2] - px[1]) + 3 * t * t * (px[3] - px[2]);
+        const dy = 3 * u * u * (py[1] - py[0]) + 6 * u * t * (py[2] - py[1]) + 3 * t * t * (py[3] - py[2]);
+        const length = Math.hypot(dx, dy);
+        return { x, y, acrossX: -dy / length, acrossY: dx / length };
+    };
+
     // ring segments across the body
     g.lineWidth = 1.2;
     g.strokeStyle = `hsla(${hue}, 45%, 32%, 0.8)`;
+    const ringHalfWidth = thickness / 2 - 0.5;
     for (const t of [0.25, 0.4, 0.55, 0.7]) {
-        // point and direction along the curve at t
-        const x = (1 - t) * (1 - t) * -halfLength + t * t * halfLength;
-        const y = 2 * (1 - t) * t * bend;
-        const dx = 2 * (1 - t) * halfLength + 2 * t * halfLength;
-        const dy = 2 * (1 - 2 * t) * bend;
-        const length = Math.hypot(dx, dy);
-        const normalX = (-dy / length) * (thickness / 2 - 0.5);
-        const normalY = (dx / length) * (thickness / 2 - 0.5);
+        const { x, y, acrossX, acrossY } = along(t);
         g.beginPath();
-        g.moveTo(x - normalX, y - normalY);
-        g.lineTo(x + normalX, y + normalY);
+        g.moveTo(x - acrossX * ringHalfWidth, y - acrossY * ringHalfWidth);
+        g.lineTo(x + acrossX * ringHalfWidth, y + acrossY * ringHalfWidth);
         g.stroke();
+    }
+
+    // two small eyes near the head end, one either side of the middle, each with a white glint
+    const head = along(0.05);
+    for (const side of [-1, 1]) {
+        const eyeX = head.x + head.acrossX * side * 2.2;
+        const eyeY = head.y + head.acrossY * side * 2.2;
+        g.beginPath();
+        g.arc(eyeX, eyeY, 1.8, 0, Math.PI * 2);
+        g.fillStyle = 'black';
+        g.fill();
+        g.beginPath();
+        g.arc(eyeX - 0.5, eyeY - 0.5, 0.7, 0, Math.PI * 2);
+        g.fillStyle = 'white';
+        g.fill();
     }
 
     return sprite;
 }
 
-// uniqueShape: every piece gets its own freshly generated sprite (each seaweed looks slightly different).
-// Otherwise one sprite is shared and each piece just lies at its own random angle.
+// uniqueShape: every piece gets its own freshly generated sprite, so each seaweed and worm looks slightly
+// different. Otherwise one sprite is shared and each piece just lies at its own random angle.
 const FOOD_TYPES = {
-    seaweed: { count: SEAWEED_COUNT, chomps: SEAWEED_CHOMPS, radius: 9, makeSprite: makeSeaweedSprite, uniqueShape: true },
-    worm: { count: WORM_COUNT, chomps: WORM_CHOMPS, radius: 10, makeSprite: makeWormSprite, uniqueShape: false },
+    seaweed: { count: SEAWEED_COUNT, calories: SEAWEED_CALORIES, radius: 9, makeSprite: makeSeaweedSprite, uniqueShape: true },
+    worm: { count: WORM_COUNT, calories: WORM_CALORIES, radius: 10, makeSprite: makeWormSprite, uniqueShape: true },
 };
 
 class FoodField {
@@ -121,6 +150,7 @@ class FoodField {
         this.meeple = meeple;
         this.buckets = new Map();
         this.contact = { depth: 0, normalX: 0, normalY: 0 };
+        this.hooverTick = 0;
         this.mapWidth = (terrain.full[0].length - 1) * PIXEL_RATIO;
         this.mapHeight = (terrain.full.length - 1) * PIXEL_RATIO;
 
@@ -171,6 +201,46 @@ class FoodField {
         });
     }
 
+    // Hoover food upgrade: food within `radius` of the head drifts towards the mouth, faster as it gets closer,
+    // until the body touches it and it's eaten
+    hooverTowards(headX, headY, mouthX, mouthY, radius) {
+        this.hooverTick++;
+        const firstBucketX = Math.floor((headX - radius) / FOOD_BUCKET_PX);
+        const lastBucketX = Math.floor((headX + radius) / FOOD_BUCKET_PX);
+        const firstBucketY = Math.floor((headY - radius) / FOOD_BUCKET_PX);
+        const lastBucketY = Math.floor((headY + radius) / FOOD_BUCKET_PX);
+
+        for (let bucketY = firstBucketY; bucketY <= lastBucketY; bucketY++) {
+            for (let bucketX = firstBucketX; bucketX <= lastBucketX; bucketX++) {
+                const key = bucketY * 100000 + bucketX;
+                const bucket = this.buckets.get(key);
+                if (!bucket) continue;
+                for (let i = bucket.length - 1; i >= 0; i--) {
+                    const food = bucket[i];
+                    // food that just moved into a later bucket this frame shouldn't be pulled twice
+                    if (food.hooveredTick === this.hooverTick) continue;
+                    if (Math.hypot(food.x - headX, food.y - headY) > radius) continue;
+
+                    const dx = mouthX - food.x;
+                    const dy = mouthY - food.y;
+                    const distance = Math.hypot(dx, dy);
+                    if (distance < 0.5) continue;
+                    const pull = Math.min(distance, HOOVER_SPEED * (1 + (1 - Math.min(distance / radius, 1)) * 2));
+                    food.x += (dx / distance) * pull;
+                    food.y += (dy / distance) * pull;
+                    food.hooveredTick = this.hooverTick;
+
+                    const newKey =
+                        Math.floor(food.y / FOOD_BUCKET_PX) * 100000 + Math.floor(food.x / FOOD_BUCKET_PX);
+                    if (newKey !== key) {
+                        bucket.splice(i, 1);
+                        this.bucketFor(food.x, food.y).push(food);
+                    }
+                }
+            }
+        }
+    }
+
     // draws the food on screen, pulsing in step with the axolotl
     drawView(meeple) {
         const scale = meeple.bulgingRadius.radius / meeple.radius;
@@ -210,8 +280,8 @@ class FoodField {
     }
 
     // eats any food touching any part of the axolotl's body (head, body or tail, so backing into it counts).
-    // Each eaten piece respawns somewhere else, and onEat(x, y, chomps) is called for it.
-    // Returns the chomps gained this frame.
+    // Each eaten piece respawns somewhere else, and onEat(x, y, calories) is called for it.
+    // Returns the calories gained this frame.
     eatTouching(meeple, onEat) {
         const facingX = Math.sin(meeple.angle);
         const facingY = Math.cos(meeple.angle);
@@ -220,7 +290,7 @@ class FoodField {
         const lastBucketX = Math.floor((meeple.x + reach) / FOOD_BUCKET_PX);
         const firstBucketY = Math.floor((meeple.y - reach) / FOOD_BUCKET_PX);
         const lastBucketY = Math.floor((meeple.y + reach) / FOOD_BUCKET_PX);
-        let chomps = 0;
+        let calories = 0;
 
         for (let bucketY = firstBucketY; bucketY <= lastBucketY; bucketY++) {
             for (let bucketX = firstBucketX; bucketX <= lastBucketX; bucketX++) {
@@ -230,14 +300,14 @@ class FoodField {
                     const food = bucket[i];
                     if (!this.touchesBody(food, meeple, facingX, facingY)) continue;
                     bucket.splice(i, 1);
-                    const gained = FOOD_TYPES[food.type].chomps;
-                    chomps += gained;
+                    const gained = FOOD_TYPES[food.type].calories;
+                    calories += gained;
                     onEat(food.x, food.y, gained);
                     this.spawn(food.type);
                 }
             }
         }
-        return chomps;
+        return calories;
     }
 
     touchesBody(food, meeple, facingX, facingY) {

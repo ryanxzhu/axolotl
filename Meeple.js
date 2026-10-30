@@ -6,6 +6,11 @@ const GILL_COLOR = '#ff6f91';
 const OUTLINE_COLOR = 'hsl(340, 45%, 45%)';
 const MOUTH_COLOR = 'hsl(345, 55%, 30%)';
 const MOUTH_OPEN_FRAMES = 7; // length of one open-and-close bite
+// where the head centre and the mouth sit, in units of radius forward from the body's centre
+const HEAD_FORWARD = 0.55;
+const MOUTH_FORWARD = 0.9;
+const HOOVER_RING_COLOR = 'rgba(255, 255, 255, 0.4)';
+const BASE_MAX_VELOCITY = 2.5 * GAME_SPEED; // top speed before any Swim faster upgrades
 const DEFAULT_ACCELERATION = 0.3 * GAME_SPEED;
 // slowest speed a bounce sends the axolotl away from a wall at
 const MIN_BOUNCE_VELOCITY = 0.4 * GAME_SPEED;
@@ -23,6 +28,14 @@ const BURST_FRAMES = 12; // how long each kick keeps pushing
 const WHIP_FRAMES = 16; // how long the whip lasts
 const WHIP_BEATS = 1.5; // how many full side-to-side beats fit in it
 const WHIP_AMPLITUDE = 1.8; // how wide it swings, as a multiple of the normal widest swing
+// Auto swim: the axolotl swims itself at top speed, wandering as if someone were randomly holding A or D
+const AUTO_TURN_RATE = 0.05; // radians per frame while "holding" a turn, same as the old A/D keys
+const AUTO_MIN_STRETCH_FRAMES = 20; // shortest time it keeps going straight or turning before changing
+const AUTO_MAX_STRETCH_FRAMES = 90; // longest
+const AUTO_STRAIGHT_CHANCE = 0.5; // chance each new stretch goes straight rather than turning
+// after hitting a wall it stops pushing and turns away from the rock for a moment before swimming on
+const AUTO_RECOVER_FRAMES = 25;
+const AUTO_RECOVER_TURN_RATE = 0.08;
 // the body as a few circles along its length, in local units of radius: [distance forward, circle radius]
 const BODY_CIRCLES = [
     [0.55, 0.62], // head
@@ -50,7 +63,9 @@ class Meeple {
             speed: 0.03, // phase advanced per unit of velocity, so a faster swim means a faster wiggle
         };
         this.velocity = velocity;
-        this.maxVelocity = 2.5 * GAME_SPEED;
+        this.speedMultiplier = 1; // raised by the Swim faster upgrade
+        this.hooverRadius = 0; // reach of the Hoover food upgrade around the head; 0 until bought
+        this.maxVelocity = BASE_MAX_VELOCITY;
         this.acceleration = DEFAULT_ACCELERATION;
         this.naturalDeceleration = 0.96;
         this.color = color;
@@ -62,6 +77,10 @@ class Meeple {
         this.mouthFrames = 0; // counts down while the eating animation plays
         this.burstFrames = 0; // counts down while a W kick is pushing
         this.whipFrames = 0; // counts down while the kick's tail whip plays
+        this.autoSwim = false; // Auto swim upgrade switched on: swims itself and ignores the player
+        this.autoTurn = 0; // current random turn: -1, 0 (straight) or 1
+        this.autoStretchFrames = 0; // frames left before picking a new random turn
+        this.autoRecoverFrames = 0; // frames left turning away from a wall it just hit
         this.adjustedX = 0;
         this.adjustedY = 0;
         this.terrain = null;
@@ -167,6 +186,13 @@ class Meeple {
         const reflectedY = movingY - 2 * intoWall * normalY;
         const speed = Math.max(Math.abs(this.velocity), MIN_BOUNCE_VELOCITY);
 
+        if (this.autoSwim) {
+            // turn towards the open water (the side the wall's normal points) while backing off
+            const turningRightway = Math.cos(this.angle) * normalX - Math.sin(this.angle) * normalY;
+            this.autoTurn = turningRightway >= 0 ? 1 : -1;
+            this.autoRecoverFrames = AUTO_RECOVER_FRAMES;
+        }
+
         const facingAlongPath = Math.sin(this.angle) * reflectedX + Math.cos(this.angle) * reflectedY >= 0;
         if (facingAlongPath) {
             this.bounceTargetAngle = resetWithin2PI(Math.atan2(reflectedX, reflectedY));
@@ -178,6 +204,7 @@ class Meeple {
     }
 
     swingAfterBounce() {
+        if (this.autoSwim) this.bounceTargetAngle = null; // the autopilot does its own turning away
         if (this.bounceTargetAngle === null) return;
         const remaining = wrapToPi(this.bounceTargetAngle - this.angle);
         if (Math.abs(remaining) <= BOUNCE_TURN_RATE) {
@@ -230,11 +257,38 @@ class Meeple {
             this.y += this.yVelocity / steps;
             if (this.resolveWallCollisions()) bounced = true;
         }
-        this.acceleration = bounced ? 0 : DEFAULT_ACCELERATION;
+        this.acceleration = bounced ? 0 : DEFAULT_ACCELERATION * this.speedMultiplier;
+    }
+
+    // Swim faster: scales top speed, acceleration and the kick together, so the whole swim feels faster
+    setSpeedMultiplier(multiplier) {
+        this.speedMultiplier = multiplier;
+        this.maxVelocity = BASE_MAX_VELOCITY * multiplier;
+        if (this.acceleration !== 0) this.acceleration = DEFAULT_ACCELERATION * multiplier;
+    }
+
+    // Hoover food: food within this distance of the head gets pulled to the mouth (see FoodField.hooverTowards)
+    setHooverRadius(radius) {
+        this.hooverRadius = radius;
+    }
+
+    // pulls nearby food towards the mouth each frame, once Hoover food is bought
+    hooverFood(food) {
+        if (this.hooverRadius === 0) return;
+        const facingX = Math.sin(this.angle);
+        const facingY = Math.cos(this.angle);
+        food.hooverTowards(
+            this.x + facingX * HEAD_FORWARD * this.radius,
+            this.y + facingY * HEAD_FORWARD * this.radius,
+            this.x + facingX * MOUTH_FORWARD * this.radius,
+            this.y + facingY * MOUTH_FORWARD * this.radius,
+            this.hooverRadius
+        );
     }
 
     // called on every fresh press of W (not key repeat)
     startBurst() {
+        if (this.autoSwim) return; // the player's W and clicks do nothing while it swims itself
         this.burstFrames = BURST_FRAMES;
         this.whipFrames = WHIP_FRAMES;
     }
@@ -244,7 +298,9 @@ class Meeple {
     kick() {
         if (this.acceleration === 0) return; // just bounced off a wall
         const cap = this.maxVelocity * BURST_SPEED_MULTIPLIER;
-        if (this.velocity < cap) this.velocity = Math.min(this.velocity + BURST_ACCELERATION, cap);
+        if (this.velocity < cap) {
+            this.velocity = Math.min(this.velocity + BURST_ACCELERATION * this.speedMultiplier, cap);
+        }
     }
 
     accelerate() {
@@ -266,6 +322,10 @@ class Meeple {
     // steering comes from the mouse (faceMouse), so the controls only swim forwards and backwards.
     // The left mouse button works exactly like W: each click kicks, holding cruises at top speed.
     updateAngleAndVelocity() {
+        if (this.autoSwim) {
+            this.autoPilot();
+            return;
+        }
         if (this.burstFrames > 0) {
             this.kick();
         } else if (this.controller.up || this.controller.mousedown) {
@@ -278,7 +338,37 @@ class Meeple {
 
     // always points at the mouse pointer, so W/S swim towards or away from it; overrides turning keys and
     // the swing after a bounce. Waits until the pointer has been seen, and skips if it's dead centre.
+    // Auto swim on or off. Clears any leftover kick or bounce swing so neither mode inherits the other's state.
+    setAutoSwim(on) {
+        this.autoSwim = on;
+        this.burstFrames = 0;
+        this.bounceTargetAngle = null;
+        this.autoTurn = 0;
+        this.autoStretchFrames = 0;
+        this.autoRecoverFrames = 0;
+    }
+
+    // swims itself: forward at the same top speed as holding W, turning left, right or going straight for
+    // random stretches. Just after a wall hit it stops pushing and turns away until clear.
+    autoPilot() {
+        if (this.autoRecoverFrames > 0) {
+            this.autoRecoverFrames--;
+            this.angle = resetWithin2PI(this.angle + this.autoTurn * AUTO_RECOVER_TURN_RATE);
+            if (this.autoRecoverFrames === 0) this.autoStretchFrames = 0;
+            return;
+        }
+
+        if (this.autoStretchFrames <= 0) {
+            this.autoTurn = Math.random() < AUTO_STRAIGHT_CHANCE ? 0 : Math.random() < 0.5 ? -1 : 1;
+            this.autoStretchFrames = Math.round(randomBetween(AUTO_MIN_STRETCH_FRAMES, AUTO_MAX_STRETCH_FRAMES));
+        }
+        this.autoStretchFrames--;
+        this.angle = resetWithin2PI(this.angle + this.autoTurn * AUTO_TURN_RATE);
+        this.accelerate();
+    }
+
     faceMouse() {
+        if (this.autoSwim) return; // the mouse doesn't steer while it swims itself
         if (mouse.x === null) return;
         if (mouse.x === this.adjustedX && mouse.y === this.adjustedY) return;
         this.bounceTargetAngle = null;
@@ -477,6 +567,17 @@ class Meeple {
         c.translate(this.adjustedX, this.adjustedY);
         // this.angle is measured from +y towards +x, so rotate the local +x axis onto the heading
         c.rotate(Math.PI / 2 - this.angle);
+
+        // the Hoover food reach: a faint ring around the head
+        if (this.hooverRadius > 0) {
+            c.beginPath();
+            c.arc(HEAD_FORWARD * this.radius, 0, this.hooverRadius, 0, Math.PI * 2);
+            c.lineWidth = 1.5;
+            c.strokeStyle = HOOVER_RING_COLOR;
+            c.stroke();
+            c.closePath();
+        }
+
         c.scale(bulgeScale, bulgeScale);
 
         this.drawTail();
